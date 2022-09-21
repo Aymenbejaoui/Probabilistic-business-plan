@@ -1,0 +1,2603 @@
+---
+title: "BP probabilisé"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    runtime: shiny
+---
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shinyWidgets)
+library(officer)
+library(flextable)
+library(rrtable)
+library(plotly)
+library(data.table)
+library(tidyverse)
+library(vip)
+library(scales)
+library(shiny)
+library(DT)
+library(ggplot2)
+library(shinydashboard)
+library(dplyr)
+library(corrplot)
+library(corrr)
+library(factoextra)
+library(shinyscreenshot)
+library(caret)
+library(skimr)
+library(forecast)
+library(ranger)
+library(earth)
+library(nnet)
+library(randomForest)
+library(zoo)
+library(fpp3)
+library(GGally)
+library(gridExtra)
+library(cowplot)
+library(feasts)
+options(shiny.usecairo=FALSE)
+```
+
+```{r data }
+# Importation des données : 
+data_AB=read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+data_ratio <- read.csv2("C:/Users/aymen/Desktop/Indicateurs_Ratio.csv") 
+data_ratio <- data_ratio  %>% 
+  filter(Formule != 0 ) 
+
+
+data_ratio$Formule[10] <-  "- ( CH6 + CH7 ) / PEB)"
+data_ratio$Formule[15] <-  "- ( PR5_CH4 + PR6_CH5 ) / PEB"
+data_ratio$Formule[19] <-  "- (PR5_CH4 + PR6_CH5)"
+data_ratio$Formule[26] <- " - ( CH6 + CH7 + CH8 ) / PNB"
+data_ratio$Formule[27] <- " - ( CH6 + CH7 ) / PNB"
+data_ratio$Formule[28] <- " - ( PR2 + CH2 ) / CH6"
+data_ratio$Formule[29] <- " =- ( PR5_CH4 + PR6_CH5 ) / PNB"
+data_ratio$Formule[36] <- " =- CH6 / PNB"
+data_ratio$Formule[38] <- " =- CH1 / ( PA1 + PA2 + PA3 + PA4 )"
+data_ratio <- data_ratio  %>% filter(grepl('/', Formule)) %>% 
+  filter(!row_number() %in% c(13:17)) %>% 
+  filter(!row_number() %in% c(16))
+
+
+## Calcul des ratios :
+
+## Calcul de tous les ratios : 
+calcul_ratio=data_AB[,-c(1,3)] # colonnes inutiles 
+calcul_ratio <-  calcul_ratio %>%
+  replace(is.na(.), 0)
+calcul_ratio<-calcul_ratio %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  mutate(montant_actuel=ifelse(Num_Terme==1,Arrete_Reference,Annee_Reference),Annee_1=Annee - 1) %>% 
+  select(-c(Arrete_Actuel,Arrete_Reference,Annee_Reference,Annee_1)) %>% 
+  arrange(Annee,Num_Terme)%>%  pivot_wider(names_from = Rubrique , values_from = montant_actuel) %>% 
+  select(-c(ModifC,Terme)) %>% 
+  mutate(CAP_Bilan = (CAP / ACT) * 10) %>% 
+  mutate(	Caf_ChOpe_CA = -( (CH6 + CH7 )/ PEB) *10)  %>% 
+  mutate(Caf_Commissions_CA= ((PR2 + CH2 ) / PEB) *10) %>%
+  mutate(GPExtra_CA = (PR9_CH10 / PEB)*10) %>% 
+  mutate(Marge_Int_CA = ( (PR1 + CH1 ) / PEB)*10) %>% 
+  mutate (PNB_CA = 	(PNB / PEB)*10) %>% 
+  mutate( Provisions_CA = 	- ( (PR5_CH4 + PR6_CH5 ) / PEB)*10) %>% 
+  mutate( Rnet_CA =	(RNetMC / PEB)*10) %>% 
+  mutate( chope_Dot_PNB =- ( (CH6 + CH7 + CH8 ) / PNB)*10) %>% 
+  mutate ( Chope_PNB= 	- ( (CH6 + CH7 ) / PNB)*10) %>% 
+  mutate( pro_Commissions_PNB = - ( (PR2 + CH2 ) / CH6)*10) %>% 
+  mutate ( Dotations_PNB =- ( (PR5_CH4 + PR6_CH5 ) / PNB)*10) %>% 
+  mutate (Salaire_PNB  =-(CH6 / PNB)*10) %>% 
+  mutate (ren_Commissions_PNB = ( (PR2 + CH2 ) / PNB)*10) %>% 
+  mutate ( Ren_Cout_Ressources =	- (CH1 / ( PA1 + PA2 + PA3 + PA4 ))*10) %>% 
+  mutate (Ren_Marge_Int_PNB =	( (PR1 + CH1 ) / PNB)*10 ) %>% 
+  mutate( Ren_Merge_Nette =  ( (PR1 / ( AC1 + AC2 + AC3 ) ) - ( CH1 / ( PA1 + PA2 + PA3 + PA4 ) ))*10) %>% 
+  mutate (Ren_Rend_Creances = 	(PR1 / ( AC1 + AC2 + AC3 ))*10) %>% 
+  mutate ( Ren_Revenus_PNB = 	( (PR3 + PR4 ) / PNB)*10) %>% 
+  mutate(Ren_Rnet_ACT =	(RNetMC / ACT)*10) %>% 
+  mutate(Ren_Rnet_CAP =	(RNetMC / CAP)*10) %>% 
+  mutate(Ren_Rnet_PNB = 	(RNetMC / PNB)*10) %>% 
+  mutate(Str_CAP_Bilan = (CAP / ACT)*10) %>% 
+  mutate(Str_depot_Credit = (PA3 / AC3)*10) %>% 
+  mutate(	Str_Credits_Bilan = (AC3 / ACT)*10) %>% 
+  mutate(Str_Depots_Bilan = (PA3 / ACT)*10) %>% 
+  mutate(Str_ERS_Bilan= 	(PA4 / ACT)*10) %>% 
+  mutate(Str_Portefeuille_Bilan= 	( (AC4 + AC5 ) / ACT)*10) %>% 
+  mutate ( Str_Taux_Credit = ( (AC3 + AC4 + AC5 ) / (PA3 + PA4))*10)
+ratio <-  select (calcul_ratio,-c(4:48)) 
+colnames(ratio)[-c(1:3)] <- data_ratio$Ratio  
+
+## Données Activité
+
+data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+nomenclature=read.csv2("C:/Users/aymen/Desktop/Indicateurs_Nomenclature.csv")
+
+data_activite <- data_activite %>% 
+  select(-c(X,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  select(-c(Indicateur,Trimestre_Reference,Trimestre_Actuel)) %>% 
+  mutate(Var =label_percent(accuracy=0.01)((Arrete_Actuel-Arrete_Reference                                                  )/Arrete_Reference) ) %>% 
+  mutate(dif= Arrete_Actuel-Arrete_Reference)  
+
+
+# Variables des slidebars ( Données et visualisation)
+
+Indicateur <- c("Bilan" ,"Resultat","Ind.d'Activité")
+  
+Var_Bilan<- unique(data_AB %>% 
+  filter(Indicateur %in% "Bilan") %>%
+  select(Rubrique))
+Var_Res<- unique(data_AB %>% 
+  filter(Indicateur %in% "Resultat") %>%
+  select(Rubrique))
+Var_Activite <- unique(data_activite$Rubrique)
+```
+
+Données Bancaires {data-orientation=colums data-navmenu="Données"}
+============================================================
+
+column {.sidebar data-width=150}
+------------------------------------------------------------
+```{r}
+
+selectInput(
+    inputId =  "Banque", 
+    label = "Banque:", 
+    choices = unique(data_AB$Banque),  selected = "AB",
+ )
+
+selectInput("an",
+    label = "Année:", 
+    choices = unique(data_AB$Annee),   selected = 2021,
+
+)
+selectInput(
+    inputId =  "trim", 
+    label = "Semestre:", 
+    choices = 1:2,   selected = 1,
+
+)
+selectInput(
+    inputId =  "Ind", 
+    label = "Choisir:", 
+    choices = Indicateur,
+      selected = "Bilan",
+
+)
+    radioButtons(
+    inputId =  "trim_ind", 
+    label = "Trimestre (Ind.Act):", 
+    choices = 1:4,   selected = 2
+)
+actionButton("screenshot1", "Capture entire page")
+observeEvent(input$screenshot1, {
+screenshot()
+})
+```
+
+column{ data-width=600}
+------------------------------------------------------------
+dfd
+```{r}
+## Fonction JS pour affichage 
+
+
+table_options <- function() {
+  list(autoWidth = F,fixedColumns=T,
+    columnDefs = list(list(className = 'dt-center',width = '50px', targets =c(3) )),
+    dom = 'T',
+    pageLength = 50,
+    buttons = list(
+      c('csv', 'pdf'),
+      list(
+        extend = "collection",
+        text = 'Show All',
+        action = DT::JS(
+          "function ( e, dt, node, config ) {
+          dt.page.len(-1);
+          dt.ajax.reload();}"
+        )
+        ),
+      list(
+        extend = "collection",
+        text = 'Show Less',
+        action = DT::JS(
+          "function ( e, dt, node, config ) {
+          dt.page.len(10);
+          dt.ajax.reload();}"
+        )
+        )
+        ),
+    deferRender = TRUE,
+    searching =F,
+    initComplete = JS(
+      "function(settings, json) {",
+      "$(this.api().table().header()).css({'background-color': '#517fb9', 'color': '#fff'});",
+      "}"
+    )
+      )
+}
+
+fluidPage(
+  setBackgroundColor("white"),
+  uiOutput("tbl")
+
+)
+#print("k,")
+set_flextable_defaults(
+  font.size = 12, font.family = "Helvetica",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+
+flex_function <- reactive({
+  if (input$Ind %in% "Bilan") { 
+    my_data = as.data.frame(data_AB %>% 
+                              filter(Banque %in% input$Banque , Indicateur %in% "Bilan", data_AB$Num_Terme == input$trim,Annee%in%input$an) %>%
+                              select(-c(X,Banque,Indicateur,Num_Terme,Terme)) %>%
+                              left_join(nomenclature,by="Rubrique") %>%
+                              pivot_wider(names_from = Information , values_from = Montant) %>%
+                              select(-c(X,Annee,Indicateur)) %>%
+                              mutate(Var =label_percent(accuracy=0.1)((Arrete_Actuel-Arrete_Reference                                                  )/Arrete_Reference) ) %>%
+                              mutate(dif= Arrete_Actuel-Arrete_Reference)  %>%
+                              select(-c(Annee_Reference,Arrete_Reference)) %>% rename( Montant = Arrete_Actuel))
+    n = dim(my_data)[2] - 2 
+    
+    return( htmltools_value((flextable(my_data) %>% 
+                               autofit()  %>%
+                               color(i = c(8,22,23), j = colnames(my_data)[1:n], color="blueviolet", part = "body") %>%
+                               bg( i = ~ dif>0, j = ~ dif, bg="green")%>%
+                               bg( i = ~ dif<0, j = ~ dif, bg="red") %>%
+                               bold(i = c(8,22,23), j = NULL, bold = TRUE, part = "body")
+                             %>% 
+                               border(border.top = fp_border(color = "azure4") ,border.bottom = fp_border(color = "azure4"),border.right = fp_border(color = "azure4"),i = c(8,22,23)) %>%  vline( border = fp_border(color = "black") ) %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3)) 
+    )))
+  }
+  else if (input$Ind %in% "Resultat")
+  {
+    my_data = data_AB %>% 
+      filter(Banque %in% input$Banque , Indicateur %in% "Resultat", data_AB$Num_Terme == input$trim,Annee%in%input$an) %>%
+      select(-c(X,Banque,Indicateur,Num_Terme,Terme)) %>%
+      left_join(nomenclature,by="Rubrique") %>%
+      pivot_wider(names_from = Information , values_from = Montant) %>%
+      select(-c(X,Annee,Indicateur)) %>%
+      mutate(Var =label_percent(accuracy=0.1)((Arrete_Actuel-Arrete_Reference                                                  )/Arrete_Reference) ) %>%
+      mutate(dif= Arrete_Actuel-Arrete_Reference)  %>%
+      select(-c(Annee_Reference,Arrete_Reference)) %>% rename( Montant = Arrete_Actuel)
+    
+    n = dim(my_data)[2]-2
+    
+    return( htmltools_value((flextable(my_data) %>% autofit() %>% fit_to_width(max_width = 50) %>%  height_all(height=10, part = "all", unit = "in") %>% color(i = c(5,8,9,16,21,22,23), j = colnames(my_data)[1:n], color="blueviolet", part = "body") %>%
+                               bg( i = ~ dif>0, j = ~ dif, bg="green")%>%
+                               bg( i = ~ dif<0, j = ~ dif, bg="red") %>%
+                               bold(i = c(5,8,9,16,21,22,23), j = NULL, bold = TRUE, part = "body") %>% 
+                               border(border.top = fp_border(color = "springgreen4") ,border.bottom = fp_border(color = "springgreen4"),border.right = fp_border(color = "springgreen4"),i = c(5,8,9,16,21,22,23)) %>%  vline( border = fp_border(color = "black") ) %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3)) 
+    )))
+    
+  }
+  else if (input$Ind %in% "Ind.d'Activité"  ) {
+    
+
+    Tab<- data_activite %>%
+      filter(Banque %in% input$Banque ,Num_Terme %in%input$trim_ind,Annee==input$an) %>%
+      select(-c(Banque,Terme,Num_Terme,Annee,X)) %>% select(-c(Annee_Reference,Arrete_Reference)) 
+    n= dim(Tab)[2] - 2
+    
+    htmltools_value((flextable(Tab) %>% autofit() %>% fit_to_width(max_width = 50) %>%  height_all(height=10, part = "all", unit = "in") %>% color(i = c(1,5,8,9,10,13,16,17,20,21), j = colnames(Tab)[1:n], color="blueviolet", part = "body") %>%
+                       bg( i = ~ dif>0, j = ~ dif, bg="green")%>%
+                       bg( i = ~ dif<0, j = ~ dif, bg="red") %>%
+                       bold(i =  c(1,5,8,9,10,13,16,17,20,21), j = NULL, bold = TRUE, part = "body") %>% 
+                       border(border.top = fp_border(color = "springgreen4") ,border.bottom = fp_border(color = "springgreen4"),border.right = fp_border(color = "springgreen4"),i = c(1,5,8,9,10,13,16,17,20,21)) %>%  vline( border = fp_border(color = "black") ) %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))  
+    ))
+    
+  }})
+
+output$tbl <- renderUI( {
+  
+  flex_function()
+})
+# formatRound('Montant', digits = 0,mark=".")%>%
+# formatRound('dif', digits = 0,mark=".")
+
+
+
+```
+
+Données Ratios {data-orientation=rows data-navmenu="Données"}
+============================================================
+
+column {.sidebar data-width=200}
+------------------------------------------------------------
+```{r}
+selectInput(
+  inputId =  "Banque_ratio_1", 
+  label = "Banque:", 
+  choices = unique(data_AB$Banque) , selected = "AB" )
+
+checkboxGroupInput(
+  inputId =  "ra_1", 
+  label = "Ratio d'activite:", 
+  choices =(pull(data_ratio %>% filter(Rubrique %in% "RATIOS D ACTIVITE") %>% select(Ratio)))
+)
+
+checkboxGroupInput(
+  inputId =  "CA_1", 
+  label = "Dec. chiffres d'affaires:", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "Decomposition du Chiffre d Affaires") %>% select(Ratio) ) ) ,
+  selected = "Caf_ChOpe_CA"
+)
+
+checkboxGroupInput(
+  inputId =  "Ratio_prod_1", 
+  label = "Ratio de productivité:", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "RATIOS DE PRODUCTIVITE") %>% select(Ratio) ) ),
+  selected = "pro_Commissions_PNB"
+)
+checkboxGroupInput(
+  inputId =  "Ratio_rt_1", 
+  label = "Ratio de rentabilité:", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "RATIOS DE RENTABILITE") %>% select(Ratio))),
+  selected="Ren_Rend_Creances"
+)
+checkboxGroupInput(
+  inputId =  "Ratio_str_1", 
+  label = "RATIOS DE STRUCTURE : ", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "RATIOS DE STRUCTURE") %>% select(Ratio))),
+  selected="Str_Depots_Bilan"
+)
+
+actionButton("screenshot88", "Capturer la page")
+observeEvent(input$screenshot88, {
+  screenshot()
+})
+```
+
+column {data-width=700}
+------------------------------------------------------------
+```{r}
+data_ratio_table_reactive <- reactive({
+ ratio_selected <- as.data.frame(t(ratio%>% arrange(Banque) %>% filter(Banque %in% input$Banque_ratio_1) %>% select(c(input$ra_1),c(input$CA_1),c(input$Ratio_prod_1),c(input$Ratio_rt_1),c(input$Ratio_str_1)))) 
+  #Tab_ratio <-  ratio_selected %>%  slice(1)
+  colnames(ratio_selected) <- unique( (ratio %>% tidyr::unite("Annee_Semestre",Annee,Num_Terme,remove=T,sep="S")) $Annee_Semestre )
+  datatable(ratio_selected,options = table_options())
+})
+
+renderDataTable({
+  data_ratio_table_reactive()
+})
+```
+
+
+
+Données Bancaires  {data-orientation=rows data-navmenu="Visualisation"}
+============================================================
+
+column {.sidebar data-width=270}
+------------------------------------------------------------
+
+```{r}
+ selectInput(
+    inputId =  "Banque_input", 
+    label = "Banque:",
+    choices = unique(data_AB$Banque),
+    multiple = T)
+
+ selectInput( inputId =  "var_bilan", 
+    label = "Variable Bilan:",
+    choices =Var_Bilan,multiple=T)
+ 
+selectInput( inputId =  "var_res", 
+    label = "Variable Résultat:", 
+    choices = Var_Res,multiple=T) 
+
+
+selectInput( inputId =  "var_act", 
+    label = "Indicateur d'activité:", 
+    choices = Var_Activite,multiple=T) 
+```
+
+row 
+------------------------------------------------------------
+
+```{r} 
+ BilanGraph <- reactive({
+            data_AB %>% 
+  filter(Banque %in% input$Banque_input & Rubrique %in% input$var_bilan & Information == "Arrete_Actuel") %>% 
+  select(Annee, Montant, Num_Terme,Rubrique,Banque) %>% 
+  mutate(Montant = Montant/1000) %>% 
+  mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+  mutate(Rubrique = factor(Rubrique))        %>%
+  tidyr::unite("Rubrique_Banque",Rubrique,Banque,remove=T) %>% 
+ ggplot( aes(x = Sem, y = Montant ,group=Rubrique_Banque,colour=Rubrique_Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Rubrique en MDT") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+ })
+ renderPlot({
+        BilanGraph()
+    })
+```
+
+row
+------------------------------------------------------------
+```{r} 
+ ResultatGraph <- reactive({
+            data_AB %>% 
+  filter(Banque %in% input$Banque_input & Rubrique %in% input$var_res & Information == "Arrete_Actuel") %>% 
+  select(Annee, Montant, Num_Terme,Rubrique,Banque) %>% 
+  mutate(Montant = Montant/1000) %>% 
+  mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+  mutate(Rubrique = factor(Rubrique))        %>%
+  tidyr::unite("Rubrique_Banque",Rubrique,Banque,remove=T) %>% 
+ ggplot( aes(x = Sem, y = Montant ,group=Rubrique_Banque,colour=Rubrique_Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Rubrique en MDT") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+ })
+ renderPlot({
+        ResultatGraph()
+    })
+```
+
+row
+------------------------------------------------------------
+```{r}
+ Indicateur_Activite_Graph <- reactive({
+            data_activite %>% 
+  filter(Banque %in% input$Banque_input & Rubrique %in% input$var_act) %>% 
+  select(Annee, Arrete_Actuel, Num_Terme,Rubrique,Banque) %>% 
+  mutate(Montant = Arrete_Actuel/1000) %>% 
+  mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+  mutate(Rubrique = factor(Rubrique))        %>%
+ tidyr::unite("Rubrique_Banque",Rubrique,Banque,remove=T) %>% 
+ ggplot( aes(x = Sem, y = Montant ,group=Rubrique_Banque,colour=Rubrique_Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Rubrique en MDT") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+ })
+ renderPlot({
+        Indicateur_Activite_Graph()
+    })
+```
+
+
+
+Données Ratios {data-orientation=rows data-navmenu="Visualisation"}
+============================================================
+column {.sidebar}
+------------------------------------------------------------
+```{r}
+
+selectInput(
+  inputId =  "Banque_ratio", 
+  label = "Banque:", 
+  choices = unique(data_AB$Banque),multiple = T )
+
+selectInput(
+  inputId =  "ra", 
+  label = "Ratio d'activite:", 
+  choices =(pull(data_ratio %>% filter(Rubrique %in% "RATIOS D ACTIVITE") %>% select(Ratio)))
+)
+
+selectInput(
+  inputId =  "CA", 
+  label = "Dec. chiffres d'affaires:", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "Decomposition du Chiffre d Affaires") %>% select(Ratio) ) )
+)
+
+selectInput(
+  inputId =  "Ratio_prod", 
+  label = "Ratio de productivité:", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "RATIOS DE PRODUCTIVITE") %>% select(Ratio) ) )
+)
+selectInput(
+  inputId =  "Ratio_rt", 
+  label = "Ratio de rentabilité:", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "RATIOS DE RENTABILITE") %>% select(Ratio)))
+)
+selectInput(
+  inputId =  "Ratio_str", 
+  label = "RATIOS DE STRUCTURE : ", 
+  choices = c(pull(data_ratio %>% filter(Rubrique %in% "RATIOS DE STRUCTURE") %>% select(Ratio)))
+)
+
+actionButton("screenshot2", "Capturer la page")
+observeEvent(input$screenshot2, {
+  screenshot()
+})
+```
+
+column
+------------------------------------------------------------
+```{r}
+ratio_activite_Graph<- reactive({
+
+   ratio %>% 
+    filter(Banque %in% input$Banque_ratio) %>% 
+    select (input$ra,Annee,Num_Terme,Banque) %>% 
+    mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+    mutate(Montant =Act_CAP_Bilan) %>% 
+    ggplot( aes(x = Sem, y =Montant,group=Banque,colour=Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Ratio d'activité") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+   
+  })
+  
+  renderPlot({
+        ratio_activite_Graph()
+    })
+```
+
+
+```{r}
+
+ratio_CA <- reactive({
+  ratio %>% 
+    filter(Banque %in% input$Banque_ratio) %>% 
+    select (input$CA,Annee,Num_Terme,Banque) %>% 
+    mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+    mutate(Montant =get(input$CA)) %>%
+    ggplot( aes(x = Sem, y =Montant,group=Banque,colour=Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Ratio Decomposition du Chiffre d Affaires") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) 
+    
+  
+})
+
+renderPlot({
+        ratio_CA()
+    })
+```
+
+row
+----------------------------------------------------------
+
+```{r}
+ratio_productivite <- reactive({
+  ratio %>% 
+    filter(Banque %in% input$Banque_ratio) %>% 
+    select (input$Ratio_prod,Annee,Num_Terme,Banque) %>% 
+    mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+    mutate(Montant =get(input$Ratio_prod)) %>%
+    ggplot( aes(x = Sem, y =Montant,group=Banque,colour=Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Ratio de productivité") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) 
+    
+  
+})
+
+renderPlot({
+       
+        ratio_productivite ()
+    })
+```
+
+```{r}
+ratio_rentabilite <- reactive({
+  ratio %>% 
+    filter(Banque %in% input$Banque_ratio) %>% 
+    select (input$Ratio_rt,Annee,Num_Terme,Banque) %>% 
+    mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+    mutate(Montant =get(input$Ratio_rt)) %>%
+    ggplot( aes(x = Sem, y =Montant,group=Banque,colour=Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Ratio de Rentabilité") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) 
+    
+  
+})
+
+renderPlot({
+        ratio_rentabilite ()
+    })
+```
+
+row
+----------------------------------------------------------
+
+```{r}
+ratio_structure <- reactive({
+  ratio %>% 
+    filter(Banque %in% input$Banque_ratio) %>% 
+    select (input$Ratio_str,Annee,Num_Terme,Banque) %>% 
+    mutate(Sem = paste0(Annee,"-S",Num_Terme)) %>% 
+    mutate(Montant =get(input$Ratio_str)) %>%
+    ggplot( aes(x = Sem, y =Montant,group=Banque,colour=Banque))+ 
+  geom_point(size=0.1) +geom_line(size=0.2)+ ylab("Ratio de Structure") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) 
+})
+renderPlot({
+        req(input$Banque_ratio)
+        ratio_structure ()
+    })
+```
+
+
+
+Valeurs Manquantes { data-navmenu="Analyse"}
+============================================================
+
+column {.sidebar data-width=170}
+------------------------------------------------------------
+```{r}
+
+selectInput(
+    inputId =  "Banque_selected", 
+    label = "Banque:", 
+    choices = unique(data_AB$Banque),  selected = "AB",
+ )
+
+selectInput(
+    inputId =  "Indicateur", 
+    label = "Choisir:", 
+    choices = c("Bilan","Resultat","Ind.Activité","All"),
+      selected = "Bilan",
+
+)
+radioButtons(
+    inputId =  "affiche", 
+    label = "Affichage par :", 
+    choices = c("ligne","Colonne"),
+        selected = "Colonne",
+
+)
+
+actionButton("scr", "Capture ")
+observeEvent(input$scr, {
+screenshot()
+})
+
+```
+
+column 
+------------------------------------------------------------
+
+```{r}
+tabBox(
+      id = "tabset1",
+      height = "1000px",
+      width = 12,
+      tabPanel("Where",
+               box((DTOutput(
+                 "Data"
+               )), width = 12)),
+      tabPanel(
+        "Données avant imputation",
+        box(uiOutput("Data_before_imputation"), width = 12)
+      ),
+        tabPanel(
+        "Données aprés imputation",
+        box(uiOutput("Data_after_imputation"), width = 12)
+      )
+    )
+```
+
+
+```{r}
+NA_table <- reactive({
+  if (input$Banque_selected %in% "AB" & input$Indicateur %in% "Bilan")  {
+Tab_Bilan<- data_AB_Disponible %>% 
+  
+  filter( Indicateur %in% "Bilan") %>% 
+  tidyr::unite("Annee_Semestre",Annee,Num_Terme,remove=T) %>% 
+  select(-c(Banque,Indicateur,Terme)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant)%>%select(-c(X,Libelle,Annee_Reference,Arrete_Reference)) %>% 
+  arrange(Rubrique,Annee_Semestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel) %>% select(-c(CP3,CP4,CP7))
+   skimmed <- skim(Tab_Bilan) [, c(1:5, 9:11, 13, 15:16)]
+  datatable(skimmed,
+        class = 'hover',
+        caption= paste0(input$Indicateur,"  ","consolidé"),
+        options = table_options(),
+        extensions = 'Buttons'
+      )
+  }
+  else if (input$Banque_selected %in% "AB" & input$Indicateur %in% "Resultat") {
+Tab_Resultat<- data_AB_Disponible %>% 
+  
+  filter( Indicateur %in% "Resultat") %>% 
+  tidyr::unite("Annee_Semestre",Annee,Num_Terme, sep = "." ,remove=T) %>% 
+  select(-c(Banque,Indicateur,Terme)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant)%>%select(-c(X,Libelle,Annee_Reference,Arrete_Reference)) %>% 
+  arrange(Rubrique,Annee_Semestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)
+  skimmed <- skim(Tab_Resultat) [, c(1:5, 9:11, 13, 15:16)] 
+  datatable( skimmed ,
+        class = 'hover',
+        caption= paste0("Valeur manquante pour " ,"  ",input$Indicateur),
+        options = table_options(),
+        extensions = 'Buttons')
+  }
+  
+  else if (input$Indicateur %in% "Bilan") {
+Tab_Bilan<- data_AB %>% 
+  
+  filter( Banque %in% input$Banque_selected , Indicateur %in% "Bilan") %>% 
+  tidyr::unite("Annee.Semestre",Annee,Num_Terme,remove=T) %>% 
+  select(-c(Banque,Indicateur,Terme)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant)%>%select(-c(Libelle,Annee_Reference,Arrete_Reference)) %>% 
+  arrange(Rubrique,Annee_Semestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel) %>% select(-c(CP3,CP4,CP7))
+   skimmed <- skim(Tab_Bilan) [, c(1:5, 9:11, 13, 15:16)]
+  datatable(skimmed,
+        class = 'hover',
+        caption= paste0(input$Indicateur,"  ","consolidé"),
+        options = table_options(),
+        extensions = 'Buttons'
+      )
+  }
+  
+  else if (input$Indicateur %in% "Resultat" & !(input$Banque_selected %in% "AB")) { 
+    Tab_Resultat<- data_AB %>% 
+  filter( Banque%in% input$Banque_selected , Indicateur %in% "Resultat") %>% 
+  tidyr::unite("Annee_Semestre",Annee,Num_Terme,remove=T) %>% 
+  select(-c(X,Banque,Indicateur,Terme)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant)%>%select(-c(Libelle,Annee_Reference,Arrete_Reference)) %>% 
+  arrange(Rubrique,Annee_Semestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)
+  skimmed <- skim(Tab_Resultat) [, c(1:5, 9:11, 13, 15:16)] 
+  datatable( skimmed ,
+        class = 'hover',
+        caption= paste0("Valeur manquante pour " ,"  ",input$Indicateur),
+        options = table_options(),
+        extensions = 'Buttons') }
+  
+  else if (input$Indicateur %in% "Activite"){
+   data_activite <-  data_activite %>% 
+     filter(Banque %in% input$Banque_selected) %>% 
+     tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T) %>% 
+     select(-c(X,Banque,Terme,Annee_Reference,Arrete_Reference,Var,dif,Libelle)) %>%
+     arrange(Annee_Trimestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)
+       skimmed <- skim(data_activite) [, c(1:5, 9:11, 13, 15:16)] 
+  datatable( skimmed ,
+        class = 'hover',
+        caption= paste0("Valeur manquante pour " ,"  ",input$Indicateur),
+        options = table_options(),
+        extensions = 'Buttons') }
+  
+})
+
+Data_disponible_NA <- reactive(
+  {
+    ## Données avant imputation 
+
+data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+
+Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+## Données Indicateurd'activité
+data_activite <- data_activite %>% 
+  dplyr::select(-c(X,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+  tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+  pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+  arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre)%>% mutate(CEB=-CEB,CH1 =-CH1 ,CH2=-CH2,CH6=-CH6 , CH6_7=-CH6_7, CH7=-CH7)
+
+Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+colnames(Indicateur_Activite) <- "Rubrique"
+
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+    
+Donnee_Trimestrielles_AB_Bilan <- Donnee_Trimestrielles_AB %>% dplyr::select(Bilan$Rubrique,Annee_Trimestre)%>% relocate(Annee_Trimestre) 
+
+Donnee_Trimestrielles_AB_Resultat <- Donnee_Trimestrielles_AB %>% dplyr::select(Resultat$Rubrique,Annee_Trimestre)%>% relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB_activite <- Donnee_Trimestrielles_AB %>% dplyr::select(Indicateur_Activite$Rubrique,Annee_Trimestre) %>% relocate(Annee_Trimestre)
+    if (input$affiche %in% "ligne"){
+      
+      
+      if(input$Indicateur %in% "All"){
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB)) )      }
+      else if(input$Indicateur %in% "Bilan"){
+        
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB_Bilan)) )
+      }
+      else if(input$Indicateur %in% "Resultat"){
+        
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB_Resultat)) )
+      }
+      else if(input$Indicateur %in% "Ind.Activité"){
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB_activite))) }
+    }
+
+
+
+    else if (input$affiche %in% "Colonne") { 
+      if (input$Indicateur %in% "All"){
+        set_flextable_defaults(
+  font.size = 9, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        
+        Donnee_Trimestrielles_AB_column <-as.data.frame( t(Donnee_Trimestrielles_AB)) %>% dplyr::slice(-1)
+        colnames(Donnee_Trimestrielles_AB_column) <- (Donnee_Trimestrielles_AB)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column <-   setDT(Donnee_Trimestrielles_AB_column, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique) %>% as.data.frame((.)) %>% mutate_at(-c(1,2), as.numeric)
+        
+       htmltools_value( flextable(Donnee_Trimestrielles_AB_column) %>% 
+                             autofit()%>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3)) %>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column)[3:length(Donnee_Trimestrielles_AB_column)],  suffix = "dof" )) 
+      }
+      else if (input$Indicateur %in% "Bilan"){
+       set_flextable_defaults(
+  font.size = 9, font.family = "Arial",
+  table.layout = "fixed",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_Bilan <-as.data.frame( t(Donnee_Trimestrielles_AB_Bilan))
+        colnames(Donnee_Trimestrielles_AB_column_Bilan) <- (Donnee_Trimestrielles_AB_Bilan)$Annee_Trimestre
+         Donnee_Trimestrielles_AB_column_Bilan <-   setDT(Donnee_Trimestrielles_AB_column_Bilan, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% as.data.frame(.) %>% mutate_at(-c(1,2), as.numeric)
+               htmltools_value( flextable (Donnee_Trimestrielles_AB_column_Bilan)%>% 
+                             autofit()%>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))%>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_Bilan)[3:length(Donnee_Trimestrielles_AB_column_Bilan)],  suffix = "dof" ) )
+      }
+      else if (input$Indicateur %in% "Resultat"){
+        set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_Resultat <-as.data.frame( t(Donnee_Trimestrielles_AB_Resultat))
+        colnames(Donnee_Trimestrielles_AB_column_Resultat) <- (Donnee_Trimestrielles_AB_Resultat)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column_Resultat <-   setDT(Donnee_Trimestrielles_AB_column_Resultat, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% select(-c(3:6))%>%
+          mutate_at(-c(1,2), as.numeric)
+        
+        htmltools_value( flextable(data =as.data.frame( Donnee_Trimestrielles_AB_column_Resultat ))%>%
+                           autofit() %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))%>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_Resultat)[3:length(Donnee_Trimestrielles_AB_column_Resultat)],  suffix = "dof" )
+        )
+      }
+      else if (input$Indicateur %in% "Ind.Activité"){
+           set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_activite<-as.data.frame( t(Donnee_Trimestrielles_AB_activite))
+        colnames(Donnee_Trimestrielles_AB_column_activite) <- (Donnee_Trimestrielles_AB)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column_activite <-   setDT(Donnee_Trimestrielles_AB_column_activite, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% 
+          select(-c(3:10)) %>% 
+          mutate_at(-c(1,2), as.numeric) %>% arrange(desc(Rubrique)) %>% slice(6,4,3,2,16,15,14,5,1,12,13,11,19,20,18,8:10,7,17)
+        htmltools_value( flextable(data =as.data.frame( Donnee_Trimestrielles_AB_column_activite)) %>% 
+                           autofit() %>% 
+                           hline(part = 'header', border = fp_border(color = "black", width = 3)) %>%
+                           colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_activite)[3:length(Donnee_Trimestrielles_AB_column_activite)],  suffix = "dof" ))
+      }
+    }})
+# Data_disponible_NA_imputed
+Data_disponible_NA_imputed <- reactive({
+ ## Données avant imputation 
+
+data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+
+Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+## Données Indicateurd'activité
+data_activite <- data_activite %>% 
+  dplyr::select(-c(X,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+  tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+  pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+  arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre)%>% mutate(CEB=-CEB,CH1 =-CH1 ,CH2=-CH2,CH6=-CH6 , CH6_7=-CH6_7, CH7=-CH7)
+
+Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+colnames(Indicateur_Activite) <- "Rubrique"
+
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+## Ajout manuel  var bilan
+Donnee_Trimestrielles_AB[1,"AC1"]<-107781 
+Donnee_Trimestrielles_AB[1,"AC2"]<-169829
+Donnee_Trimestrielles_AB[1,"AC6"]<-120854
+Donnee_Trimestrielles_AB[1,"AC7"]<-158398
+Donnee_Trimestrielles_AB[1,"ACT"]<-8242917
+Donnee_Trimestrielles_AB[1,"CH11"]<-  -4296
+Donnee_Trimestrielles_AB[1,"CH8"]<- -6930
+Donnee_Trimestrielles_AB[1,"CP1"]<-  127313
+Donnee_Trimestrielles_AB[1,"CP2"]<- 516585
+Donnee_Trimestrielles_AB[1,"CP5"]<- 4
+Donnee_Trimestrielles_AB[1,"CP6"]<-  90006
+Donnee_Trimestrielles_AB[1,"CPP"]<- 8242917
+
+## Ajout manuel var résultat
+
+Donnee_Trimestrielles_AB[1,"PA1"]<-818196 
+Donnee_Trimestrielles_AB[1,"PA2"]<-468866
+Donnee_Trimestrielles_AB[1,"PA5"]<-190154
+Donnee_Trimestrielles_AB[1,"PAS"]<-7508586
+Donnee_Trimestrielles_AB[1,"PR3"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR4"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR5_CH4"]<- -85707
+Donnee_Trimestrielles_AB[1,"PR6_CH5"]<-  -1243
+Donnee_Trimestrielles_AB[1,"PR8_CH9"]<- 957
+Donnee_Trimestrielles_AB[1,"PR9_CH10"]<- -6381
+Donnee_Trimestrielles_AB[1,"RAO"]<-  96387
+Donnee_Trimestrielles_AB[1,"RE"]<- 99726
+Donnee_Trimestrielles_AB[1,"RNet"]<-  90006
+Donnee_Trimestrielles_AB[1,"RNetMC"]<- 90006
+
+
+## Imputation par moyenne : 
+Donnee_Trimestrielles_AB$AC1 <- (na.locf(Donnee_Trimestrielles_AB$AC1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC1))))/2
+
+Donnee_Trimestrielles_AB$AC2 <- (na.locf(Donnee_Trimestrielles_AB$AC2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC2))))/2
+
+Donnee_Trimestrielles_AB$AC6 <- (na.locf(Donnee_Trimestrielles_AB$AC6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC6))))/2
+
+Donnee_Trimestrielles_AB$AC7 <- (na.locf(Donnee_Trimestrielles_AB$AC7) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC7))))/2
+
+Donnee_Trimestrielles_AB$ACT <- Donnee_Trimestrielles_AB$AC7 + Donnee_Trimestrielles_AB$AC6 + Donnee_Trimestrielles_AB$AC5 + Donnee_Trimestrielles_AB$AC4 + Donnee_Trimestrielles_AB$AC3 + Donnee_Trimestrielles_AB$AC2 + Donnee_Trimestrielles_AB$AC1 
+
+
+
+Donnee_Trimestrielles_AB$CP1 <- (na.locf(Donnee_Trimestrielles_AB$CP1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP1))))/2
+
+Donnee_Trimestrielles_AB$CP2 <- (na.locf(Donnee_Trimestrielles_AB$CP2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP2))))/2
+
+Donnee_Trimestrielles_AB$CP5 <- (na.locf(Donnee_Trimestrielles_AB$CP5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP5))))/2
+
+Donnee_Trimestrielles_AB$CP6 <- (na.locf(Donnee_Trimestrielles_AB$CP6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP6))))/2
+
+
+
+
+Donnee_Trimestrielles_AB$PA1 <- (na.locf(Donnee_Trimestrielles_AB$PA1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA1))))/2
+
+Donnee_Trimestrielles_AB$PA2 <- (na.locf(Donnee_Trimestrielles_AB$PA2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA2))))/2
+
+Donnee_Trimestrielles_AB$PAS <- (na.locf(Donnee_Trimestrielles_AB$PAS) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PAS))))/2
+
+Donnee_Trimestrielles_AB$PA5 <- Donnee_Trimestrielles_AB$PAS -( Donnee_Trimestrielles_AB$PA1 + Donnee_Trimestrielles_AB$PA2 + Donnee_Trimestrielles_AB$PA3 + Donnee_Trimestrielles_AB$PA4 )
+
+Donnee_Trimestrielles_AB<- Donnee_Trimestrielles_AB %>% relocate(PA5,.after = PA4)
+ 
+Donnee_Trimestrielles_AB$CPP <- Donnee_Trimestrielles_AB$ACT
+
+## Variables Résultats
+Donnee_Trimestrielles_AB$CH11 <- (na.locf(Donnee_Trimestrielles_AB$CH11) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH11))))/2
+
+Donnee_Trimestrielles_AB$CH8 <- (na.locf(Donnee_Trimestrielles_AB$CH8) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH8))))/2
+
+Donnee_Trimestrielles_AB$DAV <- (na.locf(Donnee_Trimestrielles_AB$DAV) + rev(na.locf(rev(Donnee_Trimestrielles_AB$DAV))))/2
+
+Donnee_Trimestrielles_AB$Epargne <- (na.locf(Donnee_Trimestrielles_AB$Epargne) + rev(na.locf(rev(Donnee_Trimestrielles_AB$Epargne))))/2
+
+A <- Donnee_Trimestrielles_AB %>% select(PR3_4,PR3,PR4) %>% mutate(PR3 = PR3 /PR3_4 , PR4 =PR4/PR3_4)
+A$PR3 <- (na.locf(A$PR3) + rev(na.locf(rev(A$PR3))))/2
+A$PR4 <- 1-  A$PR3
+
+
+Donnee_Trimestrielles_AB$PR3<-  A$PR3 * A$PR3_4
+Donnee_Trimestrielles_AB$PR4<- A$PR4 * A$PR3_4
+
+Donnee_Trimestrielles_AB$PR5_CH4 <- (na.locf(Donnee_Trimestrielles_AB$PR5_CH4) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR5_CH4))))/2
+
+Donnee_Trimestrielles_AB$PR6_CH5 <- (na.locf(Donnee_Trimestrielles_AB$PR6_CH5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR6_CH5))))/2
+
+Donnee_Trimestrielles_AB$PR8_CH9 <- (na.locf(Donnee_Trimestrielles_AB$PR8_CH9) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR8_CH9))))/2
+
+Donnee_Trimestrielles_AB$PR9_CH10 <- (na.locf(Donnee_Trimestrielles_AB$PR9_CH10) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR9_CH10))))/2
+
+Donnee_Trimestrielles_AB$RAO <- (na.locf(Donnee_Trimestrielles_AB$RAO) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RAO))))/2
+
+Donnee_Trimestrielles_AB$RE <- (na.locf(Donnee_Trimestrielles_AB$RE) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RE))))/2
+
+Donnee_Trimestrielles_AB$RNet <- (na.locf(Donnee_Trimestrielles_AB$RNet) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNet))))/2
+
+Donnee_Trimestrielles_AB$RNetMC <- (na.locf(Donnee_Trimestrielles_AB$RNetMC) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNetMC))))/2
+
+Donnee_Trimestrielles_AB_Bilan <- Donnee_Trimestrielles_AB %>% dplyr::select(Bilan$Rubrique,Annee_Trimestre)%>% relocate(Annee_Trimestre) 
+
+Donnee_Trimestrielles_AB_Resultat <- Donnee_Trimestrielles_AB %>% dplyr::select(Resultat$Rubrique,Annee_Trimestre)%>% relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB_activite <- Donnee_Trimestrielles_AB %>% dplyr::select(Indicateur_Activite$Rubrique,Annee_Trimestre) %>% relocate(Annee_Trimestre)
+    if (input$affiche %in% "ligne"){
+      
+      
+      if(input$Indicateur %in% "All"){
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB)) )      }
+      else if(input$Indicateur %in% "Bilan"){
+        
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB_Bilan)) )
+      }
+      else if(input$Indicateur %in% "Resultat"){
+        
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB_Resultat)) )
+      }
+      else if(input$Indicateur %in% "Ind.Activité"){
+        htmltools_value( flextable(as.data.frame(Donnee_Trimestrielles_AB_activite))) }
+    }
+
+
+
+    else if (input$affiche %in% "Colonne") { 
+      if (input$Indicateur %in% "All"){
+        set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        
+        Donnee_Trimestrielles_AB_column <-as.data.frame( t(Donnee_Trimestrielles_AB)) %>% dplyr::slice(-1)
+        colnames(Donnee_Trimestrielles_AB_column) <- (Donnee_Trimestrielles_AB)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column <-   setDT(Donnee_Trimestrielles_AB_column, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique) %>% as.data.frame((.))%>% select(-c(3:10)) %>% mutate_at(-c(1,2), as.numeric)
+        
+       htmltools_value( flextable(Donnee_Trimestrielles_AB_column) %>% 
+                             autofit()%>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3)) %>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column)[3:length(Donnee_Trimestrielles_AB_column)],  suffix = "dof" )) 
+      }
+      else if (input$Indicateur %in% "Bilan"){
+       set_flextable_defaults(
+  font.size = 9, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_Bilan <-as.data.frame( t(Donnee_Trimestrielles_AB_Bilan))
+        colnames(Donnee_Trimestrielles_AB_column_Bilan) <- (Donnee_Trimestrielles_AB_Bilan)$Annee_Trimestre
+         Donnee_Trimestrielles_AB_column_Bilan <-   setDT(Donnee_Trimestrielles_AB_column_Bilan, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% as.data.frame(.)%>% select(-c(3:14)) %>% mutate_at(-c(1,2), as.numeric)
+               htmltools_value( flextable (Donnee_Trimestrielles_AB_column_Bilan)%>% 
+                             autofit()%>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))%>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_Bilan)[3:length(Donnee_Trimestrielles_AB_column_Bilan)],  suffix = "dof" ) )
+      }
+      else if (input$Indicateur %in% "Resultat"){
+        set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_Resultat <-as.data.frame( t(Donnee_Trimestrielles_AB_Resultat))
+        colnames(Donnee_Trimestrielles_AB_column_Resultat) <- (Donnee_Trimestrielles_AB_Resultat)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column_Resultat <-   setDT(Donnee_Trimestrielles_AB_column_Resultat, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% select(-c(3:10))%>%
+          mutate_at(-c(1,2), as.numeric)
+        
+        htmltools_value( flextable(data =as.data.frame( Donnee_Trimestrielles_AB_column_Resultat ))%>%
+                           autofit() %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))%>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_Resultat)[3:length(Donnee_Trimestrielles_AB_column_Resultat)],  suffix = "dof" )
+        )
+      }
+      else if (input$Indicateur %in% "Ind.Activité"){
+           set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_activite<-as.data.frame( t(Donnee_Trimestrielles_AB_activite))
+        colnames(Donnee_Trimestrielles_AB_column_activite) <- (Donnee_Trimestrielles_AB)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column_activite <-   setDT(Donnee_Trimestrielles_AB_column_activite, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% 
+          select(-c(3:10)) %>% 
+          mutate_at(-c(1,2), as.numeric) %>% arrange(desc(Rubrique)) %>% slice(6,4,3,2,16,15,14,5,1,12,13,11,19,20,18,8:10,7,17)
+        htmltools_value( flextable(data =as.data.frame( Donnee_Trimestrielles_AB_column_activite)) %>% 
+                           autofit() %>% 
+                           hline(part = 'header', border = fp_border(color = "black", width = 3)) %>%
+                           colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_activite)[3:length(Donnee_Trimestrielles_AB_column_activite)],  suffix = "dof" ))
+      }
+    }
+})
+output$Data <- renderDataTable({
+  NA_table()
+})
+output$Data_before_imputation <- renderUI({
+  
+  Data_disponible_NA()
+})
+
+output$Data_after_imputation <- renderUI({
+  
+  Data_disponible_NA_imputed()
+})
+```
+
+Correlation  {data-orientation=rows data-navmenu="Analyse"}
+============================================================
+
+column {.sidebar data-width=270}
+------------------------------------------------------------
+```{r}
+data_activite_B <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% select(Rubrique))
+Resultat<- unique(data_AB %>% filter(Indicateur=="Resultat") %>% select(Rubrique))
+
+selectInput(
+    inputId =  "Indicateur_corr", 
+    label = "Choisir un indicateur :", 
+    choices = c("Bilan","Resultat","Activite"),selected = "Bilan" )
+selectInput(
+  inputId =  "all_rubrique_Y", 
+  label = "Choisir ue variable Y :", 
+  choices = append(Bilan$Rubrique,Resultat$Rubrique),selected = "AC2")
+checkboxGroupInput(
+  inputId =  "all_rubrique_X", 
+  label = "Choisir des variables explicatives X:", 
+  choices = append(Bilan$Rubrique,Resultat$Rubrique),selected = "AC1")
+actionButton("screenshot5", "Capturer la page")
+observeEvent(input$screenshot5, {
+screenshot()
+})
+
+```
+
+row
+----------------------------------------------------------
+```{r}
+## Préparation des données : 
+
+correlation_Rubrique <- reactive({
+  data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+
+Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+## Données Indicateurd'activité
+data_activite <- data_activite %>% 
+  dplyr::select(-c(X,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+  tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+  pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+  arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre)
+
+Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+colnames(Indicateur_Activite) <- "Rubrique"
+
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+
+## Ajout manuel  var bilan
+Donnee_Trimestrielles_AB[1,"AC1"]<-107781 
+Donnee_Trimestrielles_AB[1,"AC2"]<-169829
+Donnee_Trimestrielles_AB[1,"AC6"]<-120854
+Donnee_Trimestrielles_AB[1,"AC7"]<-158398
+Donnee_Trimestrielles_AB[1,"ACT"]<-8242917
+Donnee_Trimestrielles_AB[1,"CH11"]<-  -4296
+Donnee_Trimestrielles_AB[1,"CH8"]<- -6930
+Donnee_Trimestrielles_AB[1,"CP1"]<-  127313
+Donnee_Trimestrielles_AB[1,"CP2"]<- 516585
+Donnee_Trimestrielles_AB[1,"CP5"]<- 4
+Donnee_Trimestrielles_AB[1,"CP6"]<-  90006
+Donnee_Trimestrielles_AB[1,"CPP"]<- 8242917
+
+## Ajout manuel var résultat
+
+Donnee_Trimestrielles_AB[1,"PA1"]<-818196 
+Donnee_Trimestrielles_AB[1,"PA2"]<-468866
+Donnee_Trimestrielles_AB[1,"PA5"]<-190154
+Donnee_Trimestrielles_AB[1,"PAS"]<-7508586
+Donnee_Trimestrielles_AB[1,"PR3"]<-49800
+Donnee_Trimestrielles_AB[1,"PR5_CH4"]<- -85707
+Donnee_Trimestrielles_AB[1,"PR6_CH5"]<-  -1243
+Donnee_Trimestrielles_AB[1,"PR8_CH9"]<- 957
+Donnee_Trimestrielles_AB[1,"PR9_CH10"]<- -6381
+Donnee_Trimestrielles_AB[1,"RAO"]<-  96387
+Donnee_Trimestrielles_AB[1,"RE"]<- 99726
+Donnee_Trimestrielles_AB[1,"RNet"]<-  90006
+Donnee_Trimestrielles_AB[1,"RNetMC"]<- 90006
+
+
+## Imputation par moyenne : 
+Donnee_Trimestrielles_AB$AC1 <- (na.locf(Donnee_Trimestrielles_AB$AC1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC1))))/2
+
+Donnee_Trimestrielles_AB$AC2 <- (na.locf(Donnee_Trimestrielles_AB$AC2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC2))))/2
+
+Donnee_Trimestrielles_AB$AC6 <- (na.locf(Donnee_Trimestrielles_AB$AC6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC6))))/2
+
+Donnee_Trimestrielles_AB$AC7 <- (na.locf(Donnee_Trimestrielles_AB$AC7) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC7))))/2
+
+Donnee_Trimestrielles_AB$ACT <- Donnee_Trimestrielles_AB$AC7 + Donnee_Trimestrielles_AB$AC6 + Donnee_Trimestrielles_AB$AC5 + Donnee_Trimestrielles_AB$AC4 + Donnee_Trimestrielles_AB$AC3 + Donnee_Trimestrielles_AB$AC2 + Donnee_Trimestrielles_AB$AC1 
+
+
+
+Donnee_Trimestrielles_AB$CP1 <- (na.locf(Donnee_Trimestrielles_AB$CP1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP1))))/2
+
+Donnee_Trimestrielles_AB$CP2 <- (na.locf(Donnee_Trimestrielles_AB$CP2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP2))))/2
+
+Donnee_Trimestrielles_AB$CP5 <- (na.locf(Donnee_Trimestrielles_AB$CP5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP5))))/2
+
+Donnee_Trimestrielles_AB$CP6 <- (na.locf(Donnee_Trimestrielles_AB$CP6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP6))))/2
+
+
+
+
+Donnee_Trimestrielles_AB$PA1 <- (na.locf(Donnee_Trimestrielles_AB$PA1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA1))))/2
+
+Donnee_Trimestrielles_AB$PA2 <- (na.locf(Donnee_Trimestrielles_AB$PA2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA2))))/2
+
+Donnee_Trimestrielles_AB$PAS <- (na.locf(Donnee_Trimestrielles_AB$PAS) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PAS))))/2
+
+Donnee_Trimestrielles_AB$PA5 <- Donnee_Trimestrielles_AB$PAS -( Donnee_Trimestrielles_AB$PA1 + Donnee_Trimestrielles_AB$PA2 + Donnee_Trimestrielles_AB$PA3 + Donnee_Trimestrielles_AB$PA4 )
+
+Donnee_Trimestrielles_AB<- Donnee_Trimestrielles_AB %>% relocate(PA5,.after = PA4)
+ 
+Donnee_Trimestrielles_AB$CPP <- Donnee_Trimestrielles_AB$ACT
+
+## Variables Résultats
+Donnee_Trimestrielles_AB$CH11 <- (na.locf(Donnee_Trimestrielles_AB$CH11) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH11))))/2
+
+Donnee_Trimestrielles_AB$CH8 <- (na.locf(Donnee_Trimestrielles_AB$CH8) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH8))))/2
+
+Donnee_Trimestrielles_AB$DAV <- (na.locf(Donnee_Trimestrielles_AB$DAV) + rev(na.locf(rev(Donnee_Trimestrielles_AB$DAV))))/2
+
+Donnee_Trimestrielles_AB$Epargne <- (na.locf(Donnee_Trimestrielles_AB$Epargne) + rev(na.locf(rev(Donnee_Trimestrielles_AB$Epargne))))/2
+
+
+Donnee_Trimestrielles_AB$PR1 <- (na.locf(Donnee_Trimestrielles_AB$PR1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR1))))/2
+
+Donnee_Trimestrielles_AB$PR3 <- (na.locf(Donnee_Trimestrielles_AB$PR3) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR3))))/2
+
+Donnee_Trimestrielles_AB[,"PR4"]<-  Donnee_Trimestrielles_AB[,"PR3_4"] - Donnee_Trimestrielles_AB[,"PR3"]
+
+Donnee_Trimestrielles_AB$PR5_CH4 <- (na.locf(Donnee_Trimestrielles_AB$PR5_CH4) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR5_CH4))))/2
+
+Donnee_Trimestrielles_AB$PR6_CH5 <- (na.locf(Donnee_Trimestrielles_AB$PR6_CH5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR6_CH5))))/2
+
+Donnee_Trimestrielles_AB$PR8_CH9 <- (na.locf(Donnee_Trimestrielles_AB$PR8_CH9) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR8_CH9))))/2
+
+Donnee_Trimestrielles_AB$PR9_CH10 <- (na.locf(Donnee_Trimestrielles_AB$PR9_CH10) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR9_CH10))))/2
+
+Donnee_Trimestrielles_AB$RAO <- (na.locf(Donnee_Trimestrielles_AB$RAO) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RAO))))/2
+
+Donnee_Trimestrielles_AB$RE <- (na.locf(Donnee_Trimestrielles_AB$RE) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RE))))/2
+
+Donnee_Trimestrielles_AB$RNet <- (na.locf(Donnee_Trimestrielles_AB$RNet) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNet))))/2
+
+Donnee_Trimestrielles_AB$RNetMC <- (na.locf(Donnee_Trimestrielles_AB$RNetMC) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNetMC))))/2
+
+Donnee_Trimestrielles_AB_After_Imputation <- Donnee_Trimestrielles_AB
+Donnee_Bilan <- Donnee_Trimestrielles_AB_After_Imputation %>% select(c(Bilan$Rubrique)) 
+Donnee_Resultat <- Donnee_Trimestrielles_AB_After_Imputation %>% select(c(Resultat$Rubrique))
+Donnee_indicateur_activite <- Donnee_Trimestrielles_AB_After_Imputation %>% select(c(Indicateur_Activite$Rubrique))
+
+    if(input$Indicateur_corr %in% "Bilan"){
+        Donnee_Bilan %>% correlate() %>% 
+    rplot() + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylab("Corrélation entre variable Bilan")
+    }
+  else if(input$Indicateur_corr %in% "Resultat"){
+        Donnee_Resultat %>% correlate() %>% 
+     rplot() + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylab("Corrélation entre variable Résultat")
+  }
+
+ else if(input$Indicateur_corr %in% "Activite"){
+        Donnee_indicateur_activite %>% correlate() %>% 
+   rplot() + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + ylab("Corrélation Indicateur d'activité ")
+  }
+
+
+})
+```
+
+```{r}
+## Corrélation des variables Bilan 
+renderPlot({
+  correlation_Rubrique()
+})
+```
+
+row
+----------------------------------------------------------
+```{r}
+plot_rubrique <- reactive({
+    data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+
+Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+## Données Indicateurd'activité
+data_activite <- data_activite %>% 
+  dplyr::select(-c(X,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+  tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+  pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+  arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre)
+
+Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+colnames(Indicateur_Activite) <- "Rubrique"
+
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+
+## Ajout manuel  var bilan
+Donnee_Trimestrielles_AB[1,"AC1"]<-107781 
+Donnee_Trimestrielles_AB[1,"AC2"]<-169829
+Donnee_Trimestrielles_AB[1,"AC6"]<-120854
+Donnee_Trimestrielles_AB[1,"AC7"]<-158398
+Donnee_Trimestrielles_AB[1,"ACT"]<-8242917
+Donnee_Trimestrielles_AB[1,"CH11"]<-  -4296
+Donnee_Trimestrielles_AB[1,"CH8"]<- -6930
+Donnee_Trimestrielles_AB[1,"CP1"]<-  127313
+Donnee_Trimestrielles_AB[1,"CP2"]<- 516585
+Donnee_Trimestrielles_AB[1,"CP5"]<- 4
+Donnee_Trimestrielles_AB[1,"CP6"]<-  90006
+Donnee_Trimestrielles_AB[1,"CPP"]<- 8242917
+
+## Ajout manuel var résultat
+
+Donnee_Trimestrielles_AB[1,"PA1"]<-818196 
+Donnee_Trimestrielles_AB[1,"PA2"]<-468866
+Donnee_Trimestrielles_AB[1,"PA5"]<-190154
+Donnee_Trimestrielles_AB[1,"PAS"]<-7508586
+Donnee_Trimestrielles_AB[1,"PR3"]<-49800
+Donnee_Trimestrielles_AB[1,"PR5_CH4"]<- -85707
+Donnee_Trimestrielles_AB[1,"PR6_CH5"]<-  -1243
+Donnee_Trimestrielles_AB[1,"PR8_CH9"]<- 957
+Donnee_Trimestrielles_AB[1,"PR9_CH10"]<- -6381
+Donnee_Trimestrielles_AB[1,"RAO"]<-  96387
+Donnee_Trimestrielles_AB[1,"RE"]<- 99726
+Donnee_Trimestrielles_AB[1,"RNet"]<-  90006
+Donnee_Trimestrielles_AB[1,"RNetMC"]<- 90006
+
+
+Donnee_Trimestrielles_AB$AC1 <- (na.locf(Donnee_Trimestrielles_AB$AC1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC1))))/2
+
+Donnee_Trimestrielles_AB$AC2 <- (na.locf(Donnee_Trimestrielles_AB$AC2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC2))))/2
+
+Donnee_Trimestrielles_AB$AC6 <- (na.locf(Donnee_Trimestrielles_AB$AC6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC6))))/2
+
+Donnee_Trimestrielles_AB$AC7 <- (na.locf(Donnee_Trimestrielles_AB$AC7) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC7))))/2
+
+Donnee_Trimestrielles_AB$ACT <- Donnee_Trimestrielles_AB$AC7 + Donnee_Trimestrielles_AB$AC6 + Donnee_Trimestrielles_AB$AC5 + Donnee_Trimestrielles_AB$AC4 + Donnee_Trimestrielles_AB$AC3 + Donnee_Trimestrielles_AB$AC2 + Donnee_Trimestrielles_AB$AC1 
+
+Donnee_Trimestrielles_AB$CH11 <- (na.locf(Donnee_Trimestrielles_AB$CH11) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH11))))/2
+
+Donnee_Trimestrielles_AB$CH8 <- (na.locf(Donnee_Trimestrielles_AB$CH8) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH8))))/2
+
+Donnee_Trimestrielles_AB$CP1 <- (na.locf(Donnee_Trimestrielles_AB$CP1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP1))))/2
+
+Donnee_Trimestrielles_AB$CP2 <- (na.locf(Donnee_Trimestrielles_AB$CP2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP2))))/2
+
+Donnee_Trimestrielles_AB$CP5 <- (na.locf(Donnee_Trimestrielles_AB$CP5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP5))))/2
+
+Donnee_Trimestrielles_AB$CP6 <- (na.locf(Donnee_Trimestrielles_AB$CP6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP6))))/2
+
+Donnee_Trimestrielles_AB$CPP <-Donnee_Trimestrielles_AB$ACT
+
+
+## Variables Résultats
+
+Donnee_Trimestrielles_AB$DAV <- (na.locf(Donnee_Trimestrielles_AB$DAV) + rev(na.locf(rev(Donnee_Trimestrielles_AB$DAV))))/2
+
+Donnee_Trimestrielles_AB$Epargne <- (na.locf(Donnee_Trimestrielles_AB$Epargne) + rev(na.locf(rev(Donnee_Trimestrielles_AB$Epargne))))/2
+
+Donnee_Trimestrielles_AB$PA1 <- (na.locf(Donnee_Trimestrielles_AB$PA1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA1))))/2
+
+Donnee_Trimestrielles_AB$PA2 <- (na.locf(Donnee_Trimestrielles_AB$PA2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA2))))/2
+
+Donnee_Trimestrielles_AB$PA3 <- (na.locf(Donnee_Trimestrielles_AB$PA3) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA3))))/2
+
+Donnee_Trimestrielles_AB$PA5 <- (na.locf(Donnee_Trimestrielles_AB$PA5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA5))))/2
+
+Donnee_Trimestrielles_AB$PAS <- (na.locf(Donnee_Trimestrielles_AB$PAS) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PAS))))/2
+
+Donnee_Trimestrielles_AB$PR1 <- (na.locf(Donnee_Trimestrielles_AB$PR1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR1))))/2
+
+Donnee_Trimestrielles_AB$PR3 <- (na.locf(Donnee_Trimestrielles_AB$PR3) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR3))))/2
+
+Donnee_Trimestrielles_AB[,"PR4"]<-  Donnee_Trimestrielles_AB[,"PR3_4"] - Donnee_Trimestrielles_AB[,"PR3"]
+
+Donnee_Trimestrielles_AB$PR5_CH4 <- (na.locf(Donnee_Trimestrielles_AB$PR5_CH4) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR5_CH4))))/2
+
+Donnee_Trimestrielles_AB$PR6_CH5 <- (na.locf(Donnee_Trimestrielles_AB$PR6_CH5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR6_CH5))))/2
+
+Donnee_Trimestrielles_AB$PR8_CH9 <- (na.locf(Donnee_Trimestrielles_AB$PR8_CH9) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR8_CH9))))/2
+
+Donnee_Trimestrielles_AB$PR9_CH10 <- (na.locf(Donnee_Trimestrielles_AB$PR9_CH10) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR9_CH10))))/2
+
+Donnee_Trimestrielles_AB$RAO <- (na.locf(Donnee_Trimestrielles_AB$RAO) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RAO))))/2
+
+Donnee_Trimestrielles_AB$RE <- (na.locf(Donnee_Trimestrielles_AB$RE) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RE))))/2
+
+Donnee_Trimestrielles_AB$RNet <- (na.locf(Donnee_Trimestrielles_AB$RNet) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNet))))/2
+
+Donnee_Trimestrielles_AB$RNetMC <- (na.locf(Donnee_Trimestrielles_AB$RNetMC) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNetMC))))/2
+
+
+Donnee_Trimestrielles_AB_After_Imputation <- Donnee_Trimestrielles_AB
+req(input$all_rubrique_X)
+y  <- Donnee_Trimestrielles_AB_After_Imputation%>% 
+    select(c(input$all_rubrique_Y))
+predictor <- Donnee_Trimestrielles_AB_After_Imputation %>% select(c(input$all_rubrique_X)) 
+df <- Donnee_Trimestrielles_AB_After_Imputation %>% select(colnames(predictor)) %>% mutate(z= rowSums(.)) %>%  mutate(target = y)
+ggplotly(ggplot(df ,aes(x=z/1000 ,y=unlist(df[,ncol(df)]/1000))) +geom_point() + geom_smooth(method = "lm") + ylab(paste0(input$all_rubrique_Y,"en MDT"))+xlab(("Rubriques X séléctionnées en MDT")))
+})
+```
+
+```{r}
+renderPlotly({
+  plot_rubrique()
+  })
+```
+sj
+Importance des Variables  {data-orientation=rows data-navmenu="Analyse"}
+============================================================
+
+column {.sidebar data-width=270}
+------------------------------------------------------------
+
+```{r}
+data_activite_B <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% select(Rubrique))
+Resultat<- unique(data_AB %>% filter(Indicateur=="Resultat") %>% select(Rubrique))
+Indicateur_Activite<-unique(data_activite_B$Rubrique)
+
+selectInput(
+  inputId =  "Bilan_Y", 
+  label = "Choisir une variable à expliquer:", 
+  choices=Indicateur_Activite,selected ="PEB")
+
+selectInput(
+  inputId =  "model", 
+  label = "Choisir un modèle de prédiction :", 
+  choices=c("lm","earth","RF","KNN"),selected  ="lm")
+
+selectInput(
+  inputId =  "Banque_SB", 
+  label = "Choisir une Banque :", 
+  choices=unique(data_activite_B$Banque),selected ="AB")
+checkboxGroupInput(
+  inputId =  "Bilan_X", 
+  label = "Choisir des variables explicatives:", 
+  choices = Indicateur_Activite,
+  selected="PR1")
+actionButton("screenshot2", "Capture entire page")
+observeEvent(input$screenshot2, {
+  screenshot()
+})
+```
+
+#### Importance des  Variables   : 
+row
+------------------------------------------------------------
+
+```{r}
+data <- reactive({
+  data_activite_B1 <- data_activite_B %>% 
+    select(-c(X,Indicateur)) %>%
+    left_join(nomenclature,by="Rubrique") %>% 
+    pivot_wider(names_from = Information , values_from = Montant) %>% 
+    select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+    tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = ".") %>% 
+    pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel) %>% 
+    transform(Annee_Trimestre = as.numeric(Annee_Trimestre)) %>%  arrange(Annee_Trimestre) %>% 
+    arrange(Banque) %>%filter(Banque %in% input$Banque_SB) %>% select(-c(Banque)) %>% select(sort(names(.))) %>% relocate(Annee_Trimestre)
+  return(data_activite_B1)
+})
+
+
+model_lm_VIP <- reactive({ 
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- lm(formula = current_formula, data = data()[,-1])
+  vip(model,method="firm") + ggtitle(paste0( "Var Imp avec régression linéaire ", "basée sur la variance "))
+})
+model_earth_VIP <-reactive({
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- earth(formula = current_formula, data = data()[,-1],pmethod="exhaustive",degree=2)
+  vip(model,method="firm")+ggtitle(paste0( "Var Imp avec Multivariate Adaptive Regression Splines", "basée sur la variance "))
+})
+
+model_RF_VIP <- reactive({ 
+  req(data())
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- randomForest(formula = current_formula, data = data()[,-1],importance=T,ntree = 300)
+  vip(model,method="firm") + ggtitle(paste0( "Var Imp avec Random Forest", "basée sur la variance "))
+})
+
+model_KNN_VIP <- reactive({ 
+  req(data())
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- randomForest(formula = current_formula, data = data()[,-1],importance=T,ntree = 300)
+  vip(model,method="firm") + ggtitle(paste0( "Var Imp avec Random Forest", "basée sur la variance "))
+})
+
+renderPlot({
+  if (input$model %in% "lm"){
+    model_lm_VIP() }
+  else if (input$model %in% "earth") { 
+    model_earth_VIP()}
+  else if (input$model %in% "RF") {
+    model_RF_VIP()
+  }
+})
+```
+
+row
+------------------------------------------------------------
+
+```{r}
+
+
+## lm
+
+model_lm <- reactive({ 
+  req(data())
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- lm(formula = current_formula, data = data()[,-1])
+  summary(model)
+})
+## Mars (multivariate adaptive regression splines)
+model_earth <- reactive({
+  req(data())
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- earth(formula = current_formula, data = data()[,-1],pmethod="exhaustive",degree=1)
+  summary(model)
+})
+
+
+model_RF <- reactive({ 
+  req(data())
+  Selected <- data() %>% 
+    select(c(input$Bilan_Y))
+  predictor <- data() %>% 
+    select(c(input$Bilan_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- randomForest(formula = current_formula, data = data()[,-1],importance=T,ntree = 300)
+  summary(model)
+})
+
+renderPrint({
+  if (input$model %in% "lm"){
+    model_lm()
+  }
+  else if (input$model %in% "earth"){
+    model_earth()
+  }
+  else if (input$model %in% "RF") {
+    model_RF()
+  }
+  
+})
+```
+
+row
+------------------------------------------------------------
+
+
+Classification  {data-orientation=columns data-navmenu="Analyse"}
+============================================================
+
+column {.sidebar data-width=270}
+------------------------------------------------------------
+
+### Classifier AMEN BANK Selon :
+```{r}
+# Bilan : 
+data_AB_Disponible <- read.csv2("C:/Users/aymen/Desktop/Donnees_AB_Semestrielles_2007-2021.csv")
+Tab_Bilan<- data_AB_Disponible %>% 
+  
+  filter( Indicateur %in% "Bilan") %>% 
+  tidyr::unite("Annee_Semestre",Annee,Num_Terme, sep = ".",remove=T) %>% 
+  select(-c(Banque,Indicateur,Terme)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant)%>%select(-c(X,Libelle,Annee_Reference,Arrete_Reference)) %>% 
+  arrange(Rubrique,Annee_Semestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel) %>% select(-c(CP3,CP4,CP5,CP7))
+
+## NA 
+preProcess_missingdata_Bilan<- preProcess(as.data.frame(Tab_Bilan[,2:ncol(Tab_Bilan)]), method="bagImpute")
+Tab_Bilan_imputed <- predict(preProcess_missingdata_Bilan, newdata = Tab_Bilan[,2:ncol(Tab_Bilan)])
+Annee_semestre <- Tab_Bilan$Annee_Semestre
+Tab_Bilan_imputed <- Tab_Bilan_imputed %>% 
+  cbind(Annee_semestre) %>% 
+  relocate(Annee_semestre) %>% 
+  select(-c(Indicateur))
+# Résultat
+Tab_Resultat<- data_AB_Disponible %>% 
+  
+  filter( Indicateur %in% "Resultat") %>% 
+  tidyr::unite("Annee_Semestre",Annee,Num_Terme, sep = ".",remove=T) %>% 
+  select(-c(Banque,Indicateur,Terme)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant)%>%select(-c(X,Libelle,Annee_Reference,Arrete_Reference)) %>% 
+  arrange(Rubrique,Annee_Semestre) %>% pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel) %>% 
+  select(-c(ModifC))
+
+## NAs 
+preProcess_missingdata_Resultat <- preProcess(as.data.frame(Tab_Resultat[,2:20]), method="bagImpute")
+Tab_Resultat_imputed <- predict(preProcess_missingdata_Resultat, newdata = Tab_Resultat[,2:20])
+Tab_Resultat_imputed <- Tab_Resultat_imputed %>% 
+  cbind(Annee_semestre) %>% 
+  relocate(Annee_semestre) %>% 
+  select(-c(Indicateur))
+
+# Indicateur d'activité sera imputé dans la phase de classification 
+# Affichage : 
+
+# Imputed_Graph <- reactive({
+# 
+# if (input$Indicateur2 %in% "Bilan") {
+# datatable(Tab_Bilan_imputed,
+#         class = 'hover',
+#         caption= "Table Bilan aprés imputation des valeurs manquantes",
+#         options = table_options(),
+#         extensions = 'Buttons'
+#       )
+# }
+# else if(input$Indicateur2 %in% "Resultat"){
+# 
+# datatable(Tab_Resultat_imputed,
+#         class = 'hover',
+#         caption= "Table Résultat aprés imputation des valeurs manquantes",
+#         options = table_options(),
+#         extensions = 'Buttons'
+#       )
+# 
+#        }                                        })
+# renderDataTable( {Imputed_Graph()})
+```
+
+```{r}
+selectInput(
+  inputId =  "Banque_cluster", 
+  label = "Banque :", 
+  choices = unique(data_AB$Banque)[1:7],multiple = T,selected = c("AB","BIAT"))
+
+
+selectInput( inputId =  "Cluster_Indicateur", 
+             label = "Indicateur d'activité:", 
+             choices = Var_Activite,multiple=T,
+             selected = c("PEB")) 
+numericInput(
+  inputId="NB_cluster",
+  label = "Nombres de classes",
+  value = 5,
+  min = 2,
+  max = 10,
+  step = 1,
+)
+
+actionButton("screenshot1", "Capture entire page")
+observeEvent(input$screenshot1, {
+  screenshot()
+})
+```
+
+column
+------------------------------------------------------------
+
+```{r}
+
+Cluster_Graph<- reactive({
+  data_activite_Transformed <- data_activite %>% 
+    
+    filter(Banque != "STB" & Banque != "UIB"& Banque != "UBCI")   %>% tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T) %>% select(-c(X,Terme,Annee_Reference,Arrete_Reference,Var,dif,Libelle)) %>%group_by(Banque,Annee_Trimestre,Rubrique) %>%  arrange(Banque ,Annee_Trimestre) %>%  pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)
+  
+  
+  preprocess_missingdata_activite <- preProcess(as.data.frame(data_activite_Transformed[,3:ncol(data_activite_Transformed)]), method="knnImpute")
+  data_activite_imputed_scaled <- predict(preprocess_missingdata_activite, newdata = data_activite_Transformed[,3:ncol(data_activite_Transformed)])
+  Annee_Trimestre <- data_activite_Transformed$Annee_Trimestre
+  Banque <-data_activite_Transformed$Banque
+  data_activite_imputed_scaled_SB <- data_activite_imputed_scaled %>% 
+    cbind(Annee_Trimestre,Banque) %>% 
+    relocate(Annee_Trimestre,Banque)
+  
+  df<-data_activite_imputed_scaled_SB %>% 
+    filter(Banque %in% input$Banque_cluster) %>% 
+    select(Banque,input$Cluster_Indicateur)
+  df_numeric <- df %>% 
+    select(-c(Banque)) 
+  data_cluster <- data_activite_imputed_scaled %>% 
+    filter(Banque %in% input$Banque_cluster)
+  
+  
+  km <-kmeans(df_numeric ,centers=input$NB_cluster,nstart=25)
+  
+  km.clusters<- km$cluster
+  rownames(data_cluster) <-paste(df$Banque,1:nrow(df_numeric),sep ="_")
+  fviz_cluster(list(data=data_cluster,cluster = km.clusters))
+  
+})
+```
+
+```{r}
+renderPlot({
+  Cluster_Graph()
+})
+
+
+## Determiner Le nombre optimal des clusters
+#fviz_nbclust(data_activite_imputed_scaled[,2],kmeans,method = "wss",print.summary = T) +labs(subtitle = "Elbow method ")
+```
+
+
+Prévision {data-orientation=rows}
+============================================================ 
+column {.sidebar data-width=160}
+------------------------------------------------------------
+```{r}
+
+selectInput(
+    inputId =  "BP_Indicateur", 
+    label = "Choisir:", 
+    choices = c("Bilan","Resultat","Ind.Activité","All"),
+      selected = "Bilan",
+
+)
+
+ selectInput( inputId =  "ts_object", 
+             label = "choisir une série temporelle:",
+             choices =c(Bilan),
+             selected="AC2")
+ 
+
+actionButton("scr4", "Capture ")
+observeEvent(input$scr4, {
+screenshot()
+})
+```
+
+column { data-width =770}
+------------------------------------------------------------
+
+```{r}
+tabsetPanel(
+      tabPanel("BP_Probabilsé",
+               box((uiOutput(
+                 "BP"
+               )), width = 50)),
+      tabPanel("    Prévision avec Time Series",
+               fluidRow(column(12,plotOutput(
+                 "TS_plot" )
+               )
+               ),br(),
+               fluidRow(column(12,plotOutput(
+                 "TS_table" )
+               ) ,column(12," Densité Spectrale :",uiOutput("specctral_feature"))
+               )
+               ,br(),
+               fluidRow(
+                 selectInput(inputId =  "ts_model", 
+                             label = "Prévision Time series avec :",
+                             choices =c("ARIMA","TBATS"),
+                             selected="ARIMA"), column(7,verbatimTextOutput("ts_prevision")))),
+      
+      tabPanel(
+        "Prévision avec Random Forest ",
+        fluidRow(column(6,
+          selectInput( inputId =  "RM_Y", 
+                       label = "choisir une Variable à prévoir:",
+                       choices =colnames(Tab_Bilan_imputed)[2:ncol(Tab_Bilan_imputed)],
+                       selected="AC1") ,
+          
+          checkboxGroupInput(
+            inputId =  "RM_X", 
+            label = "Choisir des variables explicatives X:", 
+            choices = append(Bilan$Rubrique,Resultat$Rubrique),selected = "AC1",
+            inline = TRUE))
+          ,column(5,verbatimTextOutput("RM_print")),
+                  column(7, textOutput("RM_prevision"))
+      )),
+      tabPanel(
+        "Prévision avec K-NN",
+        box(
+          selectInput( inputId =  "KNN_Y", 
+                       label = "choisir une Variable à prévoir:",
+                       choices =colnames(Tab_Bilan_imputed)[2:ncol(Tab_Bilan_imputed)],
+                       selected="AC1") ,
+          
+          checkboxGroupInput(
+            inputId =  "KNN_regression_X", 
+            label = "Choisir des variables explicatives X:", 
+            choices = append(Bilan$Rubrique,Resultat$Rubrique),selected ="AC1",
+            inline = TRUE)
+          ,verbatimTextOutput("Knn_regression"), width = 12)
+      ))
+```
+
+
+```{r}
+data_BP <- reactive({
+  data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+  data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+  
+  Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+  Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+  ## Données Indicateurd'activité
+  data_activite <- data_activite %>% 
+    dplyr::select(-c(X,Indicateur)) %>%
+    left_join(nomenclature,by="Rubrique") %>% 
+    pivot_wider(names_from = Information , values_from = Montant) %>% 
+    dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+    tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+    pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+    arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre) %>% mutate(CEB=-CEB,CH1 =-CH1 ,CH2=-CH2,CH6=-CH6 , CH6_7=-CH6_7, CH7=-CH7)
+  
+  Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+  colnames(Indicateur_Activite) <- "Rubrique"
+  
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+
+## Ajout manuel  var bilan
+Donnee_Trimestrielles_AB[1,"AC1"]<-107781 
+Donnee_Trimestrielles_AB[1,"AC2"]<-169829
+Donnee_Trimestrielles_AB[1,"AC6"]<-120854
+Donnee_Trimestrielles_AB[1,"AC7"]<-158398
+Donnee_Trimestrielles_AB[1,"ACT"]<-8242917
+Donnee_Trimestrielles_AB[1,"CH11"]<-  -4296
+Donnee_Trimestrielles_AB[1,"CH8"]<- -6930
+Donnee_Trimestrielles_AB[1,"CP1"]<-  127313
+Donnee_Trimestrielles_AB[1,"CP2"]<- 516585
+Donnee_Trimestrielles_AB[1,"CP5"]<- 4
+Donnee_Trimestrielles_AB[1,"CP6"]<-  90006
+Donnee_Trimestrielles_AB[1,"CPP"]<- 8242917
+
+## Ajout manuel var résultat
+
+Donnee_Trimestrielles_AB[1,"PA1"]<-818196 
+Donnee_Trimestrielles_AB[1,"PA2"]<-468866
+Donnee_Trimestrielles_AB[1,"PA5"]<-190154
+Donnee_Trimestrielles_AB[1,"PAS"]<-7508586
+Donnee_Trimestrielles_AB[1,"PR3"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR4"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR5_CH4"]<- -85707
+Donnee_Trimestrielles_AB[1,"PR6_CH5"]<-  -1243
+Donnee_Trimestrielles_AB[1,"PR8_CH9"]<- 957
+Donnee_Trimestrielles_AB[1,"PR9_CH10"]<- -6381
+Donnee_Trimestrielles_AB[1,"RAO"]<-  96387
+Donnee_Trimestrielles_AB[1,"RE"]<- 99726
+Donnee_Trimestrielles_AB[1,"RNet"]<-  90006
+Donnee_Trimestrielles_AB[1,"RNetMC"]<- 90006
+Donnee_Trimestrielles_AB_Apres_Imputation <- Donnee_Trimestrielles_AB 
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC1 <- (na.locf(Donnee_Trimestrielles_AB$AC1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC2 <- (na.locf(Donnee_Trimestrielles_AB$AC2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC6 <- (na.locf(Donnee_Trimestrielles_AB$AC6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC6))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC7 <- (na.locf(Donnee_Trimestrielles_AB$AC7) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC7))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$ACT <- Donnee_Trimestrielles_AB_Apres_Imputation$AC7 + Donnee_Trimestrielles_AB_Apres_Imputation$AC6 + Donnee_Trimestrielles_AB_Apres_Imputation$AC5 + Donnee_Trimestrielles_AB_Apres_Imputation$AC4 + Donnee_Trimestrielles_AB_Apres_Imputation$AC3 + Donnee_Trimestrielles_AB_Apres_Imputation$AC2 + Donnee_Trimestrielles_AB_Apres_Imputation$AC1 
+
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP1 <- (na.locf(Donnee_Trimestrielles_AB$CP1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP2 <- (na.locf(Donnee_Trimestrielles_AB$CP2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP5 <- (na.locf(Donnee_Trimestrielles_AB$CP5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP5))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP6 <- (na.locf(Donnee_Trimestrielles_AB$CP6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP6))))/2
+
+
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA1 <- (na.locf(Donnee_Trimestrielles_AB$PA1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA2 <- (na.locf(Donnee_Trimestrielles_AB$PA2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PAS <- (na.locf(Donnee_Trimestrielles_AB$PAS) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PAS))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA5 <- Donnee_Trimestrielles_AB_Apres_Imputation$PAS -( Donnee_Trimestrielles_AB_Apres_Imputation$PA1 + Donnee_Trimestrielles_AB_Apres_Imputation$PA2 + Donnee_Trimestrielles_AB_Apres_Imputation$PA3 + Donnee_Trimestrielles_AB_Apres_Imputation$PA4 )
+
+Donnee_Trimestrielles_AB_Apres_Imputation<- Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(PA5,.after = PA4)
+ 
+Donnee_Trimestrielles_AB_Apres_Imputation$CPP <- Donnee_Trimestrielles_AB_Apres_Imputation$ACT
+
+## Variables Résultats
+Donnee_Trimestrielles_AB_Apres_Imputation$CH11 <- (na.locf(Donnee_Trimestrielles_AB$CH11) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH11))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CH8 <- (na.locf(Donnee_Trimestrielles_AB$CH8) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH8))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$DAV <- (na.locf(Donnee_Trimestrielles_AB$DAV) + rev(na.locf(rev(Donnee_Trimestrielles_AB$DAV))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$Epargne <- (na.locf(Donnee_Trimestrielles_AB$Epargne) + rev(na.locf(rev(Donnee_Trimestrielles_AB$Epargne))))/2
+
+A <- Donnee_Trimestrielles_AB %>% select(PR3_4,PR3,PR4) %>% mutate(PR3 = PR3 /PR3_4 , PR4 =PR4/PR3_4)
+A$PR3 <- (na.locf(A$PR3) + rev(na.locf(rev(A$PR3))))/2
+A$PR4 <- 1-  A$PR3
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR3<-  A$PR3 * A$PR3_4
+Donnee_Trimestrielles_AB_Apres_Imputation$PR4<- A$PR4 * A$PR3_4
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR5_CH4 <- (na.locf(Donnee_Trimestrielles_AB$PR5_CH4) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR5_CH4))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR6_CH5 <- (na.locf(Donnee_Trimestrielles_AB$PR6_CH5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR6_CH5))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR8_CH9 <- (na.locf(Donnee_Trimestrielles_AB$PR8_CH9) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR8_CH9))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR9_CH10 <- (na.locf(Donnee_Trimestrielles_AB$PR9_CH10) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR9_CH10))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RAO <- (na.locf(Donnee_Trimestrielles_AB$RAO) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RAO))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RE <- (na.locf(Donnee_Trimestrielles_AB$RE) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RE))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RNet <- (na.locf(Donnee_Trimestrielles_AB$RNet) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNet))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RNetMC <- (na.locf(Donnee_Trimestrielles_AB$RNetMC) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNetMC))))/2
+
+return(Donnee_Trimestrielles_AB_Apres_Imputation)
+})
+
+BP_probabilisiste <- reactive({
+  
+ data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+  data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+  
+  Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+  Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+  ## Données Indicateurd'activité
+  data_activite <- data_activite %>% 
+    dplyr::select(-c(X,Indicateur)) %>%
+    left_join(nomenclature,by="Rubrique") %>% 
+    pivot_wider(names_from = Information , values_from = Montant) %>% 
+    dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+    tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+    pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+    arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre) %>% mutate(CEB=-CEB,CH1 =-CH1 ,CH2=-CH2,CH6=-CH6 , CH6_7=-CH6_7, CH7=-CH7)
+  
+  Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+  colnames(Indicateur_Activite) <- "Rubrique"
+  
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+
+## Ajout manuel  var bilan
+Donnee_Trimestrielles_AB[1,"AC1"]<-107781 
+Donnee_Trimestrielles_AB[1,"AC2"]<-169829
+Donnee_Trimestrielles_AB[1,"AC6"]<-120854
+Donnee_Trimestrielles_AB[1,"AC7"]<-158398
+Donnee_Trimestrielles_AB[1,"ACT"]<-8242917
+Donnee_Trimestrielles_AB[1,"CH11"]<-  -4296
+Donnee_Trimestrielles_AB[1,"CH8"]<- -6930
+Donnee_Trimestrielles_AB[1,"CP1"]<-  127313
+Donnee_Trimestrielles_AB[1,"CP2"]<- 516585
+Donnee_Trimestrielles_AB[1,"CP5"]<- 4
+Donnee_Trimestrielles_AB[1,"CP6"]<-  90006
+Donnee_Trimestrielles_AB[1,"CPP"]<- 8242917
+
+## Ajout manuel var résultat
+
+Donnee_Trimestrielles_AB[1,"PA1"]<-818196 
+Donnee_Trimestrielles_AB[1,"PA2"]<-468866
+Donnee_Trimestrielles_AB[1,"PA5"]<-190154
+Donnee_Trimestrielles_AB[1,"PAS"]<-7508586
+Donnee_Trimestrielles_AB[1,"PR3"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR4"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR5_CH4"]<- -85707
+Donnee_Trimestrielles_AB[1,"PR6_CH5"]<-  -1243
+Donnee_Trimestrielles_AB[1,"PR8_CH9"]<- 957
+Donnee_Trimestrielles_AB[1,"PR9_CH10"]<- -6381
+Donnee_Trimestrielles_AB[1,"RAO"]<-  96387
+Donnee_Trimestrielles_AB[1,"RE"]<- 99726
+Donnee_Trimestrielles_AB[1,"RNet"]<-  90006
+Donnee_Trimestrielles_AB[1,"RNetMC"]<- 90006
+Donnee_Trimestrielles_AB_Apres_Imputation <- Donnee_Trimestrielles_AB 
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC1 <- (na.locf(Donnee_Trimestrielles_AB$AC1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC2 <- (na.locf(Donnee_Trimestrielles_AB$AC2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC6 <- (na.locf(Donnee_Trimestrielles_AB$AC6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC6))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC7 <- (na.locf(Donnee_Trimestrielles_AB$AC7) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC7))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$ACT <- Donnee_Trimestrielles_AB_Apres_Imputation$AC7 + Donnee_Trimestrielles_AB_Apres_Imputation$AC6 + Donnee_Trimestrielles_AB_Apres_Imputation$AC5 + Donnee_Trimestrielles_AB_Apres_Imputation$AC4 + Donnee_Trimestrielles_AB_Apres_Imputation$AC3 + Donnee_Trimestrielles_AB_Apres_Imputation$AC2 + Donnee_Trimestrielles_AB_Apres_Imputation$AC1 
+
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP1 <- (na.locf(Donnee_Trimestrielles_AB$CP1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP2 <- (na.locf(Donnee_Trimestrielles_AB$CP2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP5 <- (na.locf(Donnee_Trimestrielles_AB$CP5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP5))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP6 <- (na.locf(Donnee_Trimestrielles_AB$CP6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP6))))/2
+
+
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA1 <- (na.locf(Donnee_Trimestrielles_AB$PA1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA2 <- (na.locf(Donnee_Trimestrielles_AB$PA2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PAS <- (na.locf(Donnee_Trimestrielles_AB$PAS) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PAS))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA5 <- Donnee_Trimestrielles_AB_Apres_Imputation$PAS -( Donnee_Trimestrielles_AB_Apres_Imputation$PA1 + Donnee_Trimestrielles_AB_Apres_Imputation$PA2 + Donnee_Trimestrielles_AB_Apres_Imputation$PA3 + Donnee_Trimestrielles_AB_Apres_Imputation$PA4 )
+
+Donnee_Trimestrielles_AB_Apres_Imputation<- Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(PA5,.after = PA4)
+ 
+Donnee_Trimestrielles_AB_Apres_Imputation$CPP <- Donnee_Trimestrielles_AB_Apres_Imputation$ACT
+
+## Variables Résultats
+Donnee_Trimestrielles_AB_Apres_Imputation$CH11 <- (na.locf(Donnee_Trimestrielles_AB$CH11) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH11))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CH8 <- (na.locf(Donnee_Trimestrielles_AB$CH8) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH8))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$DAV <- (na.locf(Donnee_Trimestrielles_AB$DAV) + rev(na.locf(rev(Donnee_Trimestrielles_AB$DAV))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$Epargne <- (na.locf(Donnee_Trimestrielles_AB$Epargne) + rev(na.locf(rev(Donnee_Trimestrielles_AB$Epargne))))/2
+
+A <- Donnee_Trimestrielles_AB %>% select(PR3_4,PR3,PR4) %>% mutate(PR3 = PR3 /PR3_4 , PR4 =PR4/PR3_4)
+A$PR3 <- (na.locf(A$PR3) + rev(na.locf(rev(A$PR3))))/2
+A$PR4 <- 1-  A$PR3
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR3<-  A$PR3 * A$PR3_4
+Donnee_Trimestrielles_AB_Apres_Imputation$PR4<- A$PR4 * A$PR3_4
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR5_CH4 <- (na.locf(Donnee_Trimestrielles_AB$PR5_CH4) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR5_CH4))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR6_CH5 <- (na.locf(Donnee_Trimestrielles_AB$PR6_CH5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR6_CH5))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR8_CH9 <- (na.locf(Donnee_Trimestrielles_AB$PR8_CH9) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR8_CH9))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR9_CH10 <- (na.locf(Donnee_Trimestrielles_AB$PR9_CH10) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR9_CH10))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RAO <- (na.locf(Donnee_Trimestrielles_AB$RAO) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RAO))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RE <- (na.locf(Donnee_Trimestrielles_AB$RE) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RE))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RNet <- (na.locf(Donnee_Trimestrielles_AB$RNet) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNet))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RNetMC <- (na.locf(Donnee_Trimestrielles_AB$RNetMC) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNetMC))))/2
+
+prevision = list(1 , 2)
+  Donnee_Trimestrielles_AB_Bilan <- Donnee_Trimestrielles_AB_Apres_Imputation %>% dplyr::select(Bilan$Rubrique,Annee_Trimestre)%>% relocate(Annee_Trimestre) 
+  
+  Donnee_Trimestrielles_AB_Resultat <- Donnee_Trimestrielles_AB_Apres_Imputation %>% dplyr::select(Resultat$Rubrique,Annee_Trimestre)%>% relocate(Annee_Trimestre)
+  
+  Donnee_Trimestrielles_AB_activite <- Donnee_Trimestrielles_AB_Apres_Imputation %>% dplyr::select(Indicateur_Activite$Rubrique,Annee_Trimestre) %>% relocate(Annee_Trimestre)
+prevision_Bilan<- c(NA,322736,6503251 ,207192.3 ,2052911 ,228386.4, NA,9861872,NA,260249,6605371 ,893607.4 ,NA, 8670649,132405,NA,NA,84101.74 ,1185711,9861872)
+prevision_Resultat <- c(NA,55587,25002,65220,450412,-193801,-6447,-200248,250164,-54011,3014,NA,-70523,-19452,-11296,100420,NA,NA,80521,-1022,89145,89145)
+  
+if (input$BP_Indicateur %in% "All"){
+        set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        
+        Donnee_Trimestrielles_AB_column <-as.data.frame( t(Donnee_Trimestrielles_AB_Apres_Imputation)) %>% dplyr::slice(-1)
+        colnames(Donnee_Trimestrielles_AB_column) <- (Donnee_Trimestrielles_AB)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column <-   setDT(Donnee_Trimestrielles_AB_column, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique) %>% as.data.frame((.))%>% select(-c(3:10)) %>% mutate_at(-c(1,2), as.numeric) %>%
+          add_column(Prevision  = NA)
+        
+       htmltools_value( flextable(Donnee_Trimestrielles_AB_column) %>% 
+                             autofit()%>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3)) %>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column)[3:length(Donnee_Trimestrielles_AB_column)],  suffix = "dof" )) 
+      }
+      else if (input$BP_Indicateur %in% "Bilan"){
+       set_flextable_defaults(
+  font.size = 9, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  line_spacing=1,
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_Bilan <-as.data.frame( t(Donnee_Trimestrielles_AB_Bilan))
+        colnames(Donnee_Trimestrielles_AB_column_Bilan) <- (Donnee_Trimestrielles_AB_Bilan)$Annee_Trimestre
+         Donnee_Trimestrielles_AB_column_Bilan <-   setDT(Donnee_Trimestrielles_AB_column_Bilan, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% as.data.frame(.)%>% select(-c(3:14)) %>% mutate_at(-c(1,2), as.numeric)%>%
+          add_column(Prevision  = prevision_Bilan)
+               htmltools_value( flextable (Donnee_Trimestrielles_AB_column_Bilan)%>% 
+                             autofit()%>%    
+                               color(i = c(8,14,19,20),  color="blueviolet", part = "body")  %>%
+                               bold(i = c(8,14,19,20), bold = TRUE, part = "body") %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))%>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_Bilan)[3:length(Donnee_Trimestrielles_AB_column_Bilan)],  suffix = "dof" ) )
+      }
+      else if (input$BP_Indicateur %in% "Resultat"){
+        set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_Resultat <-as.data.frame( t(Donnee_Trimestrielles_AB_Resultat))
+        colnames(Donnee_Trimestrielles_AB_column_Resultat) <- (Donnee_Trimestrielles_AB_Resultat)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column_Resultat <-   setDT(Donnee_Trimestrielles_AB_column_Resultat, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% select(-c(3:18))%>%
+          mutate_at(-c(1,2), as.numeric)%>%
+          add_column(Prevision  = prevision_Resultat)
+        
+        htmltools_value( flextable(data =as.data.frame( Donnee_Trimestrielles_AB_column_Resultat ))%>%
+                           autofit() %>%
+                           color(i = c(5,8,9,16,21,22),  color="blueviolet", part = "body")
+                         %>%
+                           bold(i = c(5,8,9,16,21,22), j = NULL, bold = TRUE, part = "body") %>% 
+  hline(part = 'header', border = fp_border(color = "black", width = 3))%>%
+    colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_Resultat)[3:length(Donnee_Trimestrielles_AB_column_Resultat)],  suffix = "dof" )
+        )
+      }
+      else if (input$BP_Indicateur %in% "Ind.Activité"){
+           set_flextable_defaults(
+  font.size = 8, font.family = "Arial",
+  table.layout = "autofit",
+  border.color = "white",
+  text.align = "center",
+  padding.top = 3, padding.bottom = 3,
+  padding.left = 4, padding.right = 4)
+        Donnee_Trimestrielles_AB_column_activite<-as.data.frame( t(Donnee_Trimestrielles_AB_activite))
+        colnames(Donnee_Trimestrielles_AB_column_activite) <- (Donnee_Trimestrielles_AB)$Annee_Trimestre 
+        Donnee_Trimestrielles_AB_column_activite <-   setDT(Donnee_Trimestrielles_AB_column_activite, keep.rownames = TRUE)[] %>% rename( Rubrique =rn) %>% left_join(nomenclature,by="Rubrique") %>% select(-c(X,Indicateur)) %>% relocate(Libelle,.after = Rubrique)%>% dplyr::slice(-1) %>% 
+          select(-c(3:10)) %>% 
+          mutate_at(-c(1,2), as.numeric) %>% arrange(desc(Rubrique)) %>% slice(6,4,3,2,16,15,14,5,1,12,13,11,19,20,18,21,8:10,7,17)%>%
+          add_column(Prevision  = NA)
+        htmltools_value( flextable(data =as.data.frame( Donnee_Trimestrielles_AB_column_activite)) %>% 
+                           autofit() %>% 
+                           color(i = c(1,5,8,9,10,13,16,17,20,21),  color="blueviolet", part = "body") %>%
+                           bold(i =  c(1,5,8,9,10,13,16,17,20,21), bold = TRUE, part = "body") %>% 
+                           hline(part = 'header', border = fp_border(color = "black", width = 3)) %>%
+                           colformat_int(j =colnames(Donnee_Trimestrielles_AB_column_activite)[3:length(Donnee_Trimestrielles_AB_column_activite)],  suffix = "dof" ))
+      }
+  
+})
+
+Time_series_analyse_reactive <- reactive({
+  data_AB <-read.csv2("C:/Users/aymen/Desktop/Donnees_SB_Semestrielles_2021-2017.csv")
+  data_activite <- read.csv2("Donnees_SB_Activite_2022-2017.csv") 
+  
+  Bilan <- unique(data_AB %>% filter(Indicateur=="Bilan") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("CP3","CP4","CP7")))
+  Resultat <- unique(data_AB %>% filter(Indicateur=="Resultat") %>% dplyr::select(Rubrique)) %>%subset(!(Rubrique %in% c("ModifC")))
+  ## Données Indicateurd'activité
+  data_activite <- data_activite %>% 
+    dplyr::select(-c(X,Indicateur)) %>%
+    left_join(nomenclature,by="Rubrique") %>% 
+    pivot_wider(names_from = Information , values_from = Montant) %>% 
+    dplyr::select(-c(X,Terme,Indicateur,Trimestre_Reference,Trimestre_Actuel,Libelle,Arrete_Reference,Annee_Reference)) %>% 
+    tidyr::unite("Annee_Trimestre",Annee,Num_Terme,remove=T,sep = "T") %>% 
+    pivot_wider(names_from = Rubrique , values_from = Arrete_Actuel)%>%  arrange(Annee_Trimestre) %>% 
+    arrange(Banque) %>%filter(Banque=="AB") %>% dplyr::select(-c(Banque)) %>% dplyr::select(sort(names(.))) %>% relocate(Annee_Trimestre) %>% mutate(CEB=-CEB,CH1 =-CH1 ,CH2=-CH2,CH6=-CH6 , CH6_7=-CH6_7, CH7=-CH7)
+  
+  Indicateur_Activite<- data.frame(colnames(data_activite)[2:length(colnames(data_activite))])
+  colnames(Indicateur_Activite) <- "Rubrique"
+  
+
+# Données bilan et résultat
+data_AB <- data_AB %>% 
+  filter(Banque %in% "AB") %>% 
+  dplyr::select(-c(X,Banque,Indicateur)) %>%
+  left_join(nomenclature,by="Rubrique") %>% 
+  pivot_wider(names_from = Information , values_from = Montant) %>% 
+  dplyr::select(-c(X,Libelle,Indicateur,Arrete_Reference,Annee_Reference)) %>% 
+  spread(Rubrique,Arrete_Actuel) %>% 
+  mutate(PR3_4=PR3 + PR4 ,
+         CH6_7=CH6+CH7,
+         AC4_5=AC4+AC5) %>%
+  dplyr::select(-c(CP3,ModifC)) %>% arrange(Annee) %>% mutate(Annee_Trimestre = ifelse(.$Num_Terme==1, 
+                                                                                       paste0(Annee,"T", 2),
+                                                                                       paste0(Annee,"T", 4))) %>%
+  
+  dplyr::select(-c(1:2),-Annee) %>% dplyr::select(sort(names(.))) %>%  relocate(Annee_Trimestre)
+
+Donnee_Trimestrielles_AB <- bind_rows(data_AB,data_activite) %>% arrange(Annee_Trimestre)
+Donnee_Trimestrielles_AB[19,"Epargne"]<- Donnee_Trimestrielles_AB[20,"Epargne"]
+Donnee_Trimestrielles_AB[19,"DAV"]<- Donnee_Trimestrielles_AB[20,"DAV"]
+Donnee_Trimestrielles_AB <- Donnee_Trimestrielles_AB %>% dplyr::slice(-20)
+Donnee_Trimestrielles_AB[16,"Epargne"]<- Donnee_Trimestrielles_AB[17,"Epargne"]
+Donnee_Trimestrielles_AB[16,"DAV"]<- Donnee_Trimestrielles_AB[17,"DAV"]
+Donnee_Trimestrielles_AB[20,"Epargne"]<- Donnee_Trimestrielles_AB[21,"Epargne"]
+Donnee_Trimestrielles_AB[20,"DAV"]<- Donnee_Trimestrielles_AB[21,"DAV"] 
+Donnee_Trimestrielles_AB <-  Donnee_Trimestrielles_AB %>% dplyr::slice(-17,-21) %>% dplyr::select(-CP7,-CP4)
+
+## Ajout manuel  var bilan
+Donnee_Trimestrielles_AB[1,"AC1"]<-107781 
+Donnee_Trimestrielles_AB[1,"AC2"]<-169829
+Donnee_Trimestrielles_AB[1,"AC6"]<-120854
+Donnee_Trimestrielles_AB[1,"AC7"]<-158398
+Donnee_Trimestrielles_AB[1,"ACT"]<-8242917
+Donnee_Trimestrielles_AB[1,"CH11"]<-  -4296
+Donnee_Trimestrielles_AB[1,"CH8"]<- -6930
+Donnee_Trimestrielles_AB[1,"CP1"]<-  127313
+Donnee_Trimestrielles_AB[1,"CP2"]<- 516585
+Donnee_Trimestrielles_AB[1,"CP5"]<- 4
+Donnee_Trimestrielles_AB[1,"CP6"]<-  90006
+Donnee_Trimestrielles_AB[1,"CPP"]<- 8242917
+
+## Ajout manuel var résultat
+
+Donnee_Trimestrielles_AB[1,"PA1"]<-818196 
+Donnee_Trimestrielles_AB[1,"PA2"]<-468866
+Donnee_Trimestrielles_AB[1,"PA5"]<-190154
+Donnee_Trimestrielles_AB[1,"PAS"]<-7508586
+Donnee_Trimestrielles_AB[1,"PR3"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR4"]<-Donnee_Trimestrielles_AB[1,"PR3_4"] /2
+Donnee_Trimestrielles_AB[1,"PR5_CH4"]<- -85707
+Donnee_Trimestrielles_AB[1,"PR6_CH5"]<-  -1243
+Donnee_Trimestrielles_AB[1,"PR8_CH9"]<- 957
+Donnee_Trimestrielles_AB[1,"PR9_CH10"]<- -6381
+Donnee_Trimestrielles_AB[1,"RAO"]<-  96387
+Donnee_Trimestrielles_AB[1,"RE"]<- 99726
+Donnee_Trimestrielles_AB[1,"RNet"]<-  90006
+Donnee_Trimestrielles_AB[1,"RNetMC"]<- 90006
+Donnee_Trimestrielles_AB_Apres_Imputation <- Donnee_Trimestrielles_AB 
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC1 <- (na.locf(Donnee_Trimestrielles_AB$AC1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC2 <- (na.locf(Donnee_Trimestrielles_AB$AC2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC6 <- (na.locf(Donnee_Trimestrielles_AB$AC6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC6))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$AC7 <- (na.locf(Donnee_Trimestrielles_AB$AC7) + rev(na.locf(rev(Donnee_Trimestrielles_AB$AC7))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$ACT <- Donnee_Trimestrielles_AB_Apres_Imputation$AC7 + Donnee_Trimestrielles_AB_Apres_Imputation$AC6 + Donnee_Trimestrielles_AB_Apres_Imputation$AC5 + Donnee_Trimestrielles_AB_Apres_Imputation$AC4 + Donnee_Trimestrielles_AB_Apres_Imputation$AC3 + Donnee_Trimestrielles_AB_Apres_Imputation$AC2 + Donnee_Trimestrielles_AB_Apres_Imputation$AC1 
+
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP1 <- (na.locf(Donnee_Trimestrielles_AB$CP1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP2 <- (na.locf(Donnee_Trimestrielles_AB$CP2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP5 <- (na.locf(Donnee_Trimestrielles_AB$CP5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP5))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CP6 <- (na.locf(Donnee_Trimestrielles_AB$CP6) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CP6))))/2
+
+
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA1 <- (na.locf(Donnee_Trimestrielles_AB$PA1) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA1))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA2 <- (na.locf(Donnee_Trimestrielles_AB$PA2) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PA2))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PAS <- (na.locf(Donnee_Trimestrielles_AB$PAS) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PAS))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PA5 <- Donnee_Trimestrielles_AB_Apres_Imputation$PAS -( Donnee_Trimestrielles_AB_Apres_Imputation$PA1 + Donnee_Trimestrielles_AB_Apres_Imputation$PA2 + Donnee_Trimestrielles_AB_Apres_Imputation$PA3 + Donnee_Trimestrielles_AB_Apres_Imputation$PA4 )
+
+Donnee_Trimestrielles_AB_Apres_Imputation<- Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(PA5,.after = PA4)
+ 
+Donnee_Trimestrielles_AB_Apres_Imputation$CPP <- Donnee_Trimestrielles_AB_Apres_Imputation$ACT
+
+## Variables Résultats
+Donnee_Trimestrielles_AB_Apres_Imputation$CH11 <- (na.locf(Donnee_Trimestrielles_AB$CH11) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH11))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$CH8 <- (na.locf(Donnee_Trimestrielles_AB$CH8) + rev(na.locf(rev(Donnee_Trimestrielles_AB$CH8))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$DAV <- (na.locf(Donnee_Trimestrielles_AB$DAV) + rev(na.locf(rev(Donnee_Trimestrielles_AB$DAV))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$Epargne <- (na.locf(Donnee_Trimestrielles_AB$Epargne) + rev(na.locf(rev(Donnee_Trimestrielles_AB$Epargne))))/2
+
+A <- Donnee_Trimestrielles_AB %>% select(PR3_4,PR3,PR4) %>% mutate(PR3 = PR3 /PR3_4 , PR4 =PR4/PR3_4)
+A$PR3 <- (na.locf(A$PR3) + rev(na.locf(rev(A$PR3))))/2
+A$PR4 <- 1-  A$PR3
+
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR3<-  A$PR3 * A$PR3_4
+Donnee_Trimestrielles_AB_Apres_Imputation$PR4<- A$PR4 * A$PR3_4
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR5_CH4 <- (na.locf(Donnee_Trimestrielles_AB$PR5_CH4) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR5_CH4))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR6_CH5 <- (na.locf(Donnee_Trimestrielles_AB$PR6_CH5) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR6_CH5))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR8_CH9 <- (na.locf(Donnee_Trimestrielles_AB$PR8_CH9) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR8_CH9))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$PR9_CH10 <- (na.locf(Donnee_Trimestrielles_AB$PR9_CH10) + rev(na.locf(rev(Donnee_Trimestrielles_AB$PR9_CH10))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RAO <- (na.locf(Donnee_Trimestrielles_AB$RAO) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RAO))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RE <- (na.locf(Donnee_Trimestrielles_AB$RE) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RE))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RNet <- (na.locf(Donnee_Trimestrielles_AB$RNet) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNet))))/2
+
+Donnee_Trimestrielles_AB_Apres_Imputation$RNetMC <- (na.locf(Donnee_Trimestrielles_AB$RNetMC) + rev(na.locf(rev(Donnee_Trimestrielles_AB$RNetMC))))/2
+
+
+## Time series : 
+qtr <- yearquarter("2017 Q1") 
+Donnee_Trimestrielles_AB_Apres_Imputation$Annee_Trimestre_Numeric <- seq(qtr, length.out = 21, by = 1)
+Donnee_Trimestrielles_AB_ts <- tsibble( (Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(Annee_Trimestre_Numeric) %>% select(-Annee_Trimestre)),index=Annee_Trimestre_Numeric)
+Data_selected  <- Donnee_Trimestrielles_AB_ts %>% select(Annee_Trimestre_Numeric , c(input$ts_object)) 
+Plot_seasonality <- gg_season(data = Data_selected,labes="both")
+plot_by_Quarter <- gg_subseries(data = Data_selected) +labs(title="Montant Par Trimestre")
+
+plot_grid(Plot_seasonality, plot_by_Quarter, labels=c("A", "B"), ncol = 2, nrow = 1)
+})
+
+Time_Series_Bilan_reactive <- reactive({
+   
+Donnee_Trimestrielles_AB_Apres_Imputation <- data_BP()
+## Time series : 
+qtr <- yearquarter("2017 Q1") 
+Donnee_Trimestrielles_AB_Apres_Imputation$Annee_Trimestre_Numeric <- seq(qtr, length.out = 21, by = 1)
+Donnee_Trimestrielles_AB_ts <- tsibble( (Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(Annee_Trimestre_Numeric) %>% select(-Annee_Trimestre)),index=Annee_Trimestre_Numeric)
+Data_selected  <- Donnee_Trimestrielles_AB_ts %>% select(Annee_Trimestre_Numeric , c(input$ts_object)) 
+  req(input$ts_object)
+  req(input$ts_model)
+  ts<-ts(Data_selected[,2], start = c(2017,1) , end = c(2022,1),frequency = 4)
+  
+  if (input$ts_model %in% "ARIMA"){
+    tbats_model<- tbats(ts)
+    forecast::forecast(tbats_model, h = 12)
+  }
+  else {
+    arima_model <- auto.arima(ts)
+    forecast::forecast(arima_model, h=12)
+  }
+  
+})
+
+TS_plot_reactive <- reactive({
+  Donnee_Trimestrielles_AB_Apres_Imputation <- data_BP()
+  qtr <- yearquarter("2017 Q1") 
+  Donnee_Trimestrielles_AB_Apres_Imputation$Annee_Trimestre_Numeric <- seq(qtr, length.out = 21, by = 1) 
+  Donnee_Trimestrielles_AB_ts <- tsibble( (Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(Annee_Trimestre_Numeric) %>% select(-Annee_Trimestre)),index=Annee_Trimestre_Numeric)
+  Donnee_Trimestrielles_AB_ts %>% select(Annee_Trimestre_Numeric , c(input$ts_object)) %>% autoplot() +labs(x="Rubrique",y="Montant en MDT")
+})
+spec_feature_reactive    <- reactive({
+  Donnee_Trimestrielles_AB_Apres_Imputation <- data_BP()
+  qtr <- yearquarter("2017 Q1") 
+  Donnee_Trimestrielles_AB_Apres_Imputation$Annee_Trimestre_Numeric <- seq(qtr, length.out = 21, by = 1)
+  Donnee_Trimestrielles_AB_ts <- tsibble( (Donnee_Trimestrielles_AB_Apres_Imputation %>% relocate(Annee_Trimestre_Numeric) %>% select(-Annee_Trimestre)),index=Annee_Trimestre_Numeric)
+  Data_selected  <- Donnee_Trimestrielles_AB_ts %>% select(Annee_Trimestre_Numeric , c(input$ts_object)) 
+  
+  feat_spectral(Data_selected[,2])
+})
+
+RM_print_reactive <- reactive({
+  req(data_BP)
+  req(input$RM_X)
+  req(input$RM_Y)
+  Selected <- data_BP() %>% 
+    select(c(input$RM_Y))
+  predictor <- data_BP() %>% 
+    select(c(input$RM_X))
+  current_formula <- paste0(Selected, " ~ ", paste0(colnames(predictor), collapse  = "+"))
+  current_formula <- as.formula(current_formula)
+  model <- randomForest(formula = current_formula, data = data_BP()[,-1])
+  print(model)
+
+})
+
+
+```
+
+```{r}
+output$BP <- renderUI({
+  
+  BP_probabilisiste()
+})
+
+output$TS_table <- renderPlot({
+  
+  Time_series_analyse_reactive()
+})
+
+output$ts_prevision <- renderPrint({
+
+    Time_Series_Bilan_reactive() 
+    
+    })
+
+output$TS_plot <- renderPlot({
+  
+  TS_plot_reactive()
+})
+
+output$specctral_feature <- renderUI({
+  spec_feature_reactive()
+})
+
+output$RM_print<- renderPrint({
+  RM_print_reactive()
+})
+
+output$lm_prevision <- renderText({
+  
+})
+
+```
+
+
+

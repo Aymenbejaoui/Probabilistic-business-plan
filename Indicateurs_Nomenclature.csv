@@ -1,0 +1,47 @@
+;Rubrique;Libelle;Indicateur
+1;AC1;Caisse et avoirs aupres de la BCT, CCP et TGT;Bilan
+2;AC2;Creances sur les etablissements bancaires et financiers;Bilan
+3;AC3;Creances sur la clientele;Bilan
+4;AC4;Portefeuille-titres commercial;Bilan
+5;AC5;Portefeuille d investissement;Bilan
+6;AC6;Valeurs immobilisees;Bilan
+7;AC7;Autres actifs;Bilan
+8;ACT;TOTAL ACTIFS;Bilan
+9;PA1;Banque Centrale, CCP;Bilan
+10;PA2;Depots et avoirs des etablissements bancaires et financiers;Bilan
+11;PA3;Depots et avoirs de la clientele;Bilan
+12;PA4;Emprunts et Ressources speciales;Bilan
+13;PA5;Autres passifs;Bilan
+14;PAS;TOTAL PASSIFS;Bilan
+15;CP1;Capital;Bilan
+16;CP2;Reserves;Bilan
+17;CP3;Actions propres;Bilan
+18;CP4;Autres capitaux propres;Bilan
+19;CP5;Resultats reportes;Bilan
+20;CP6;Resultat de l exercice;Bilan
+21;CP7;Resultat en instance d'affectation;Bilan
+22;CAP;TOTAL CAPITAUX PROPRES;Bilan
+23;CPP;TOTAL CAPITAUX PROPRES ET PASSIFS;Bilan
+24;PR1;Interets et revenus assimiles;Resultat
+25;PR2;Commissions recues;Resultat
+26;PR3;Gains sur portefeuille-titre commercial et operations financières;Resultat
+27;PR4;Revenus du portefeuille d investissement;Resultat
+28;PEB;Total produits d'exploitation Bancaire;Resultat
+29;CH1;Interets encourus et charges assimilees;Resultat
+30;CH2;Commissions encourues;Resultat
+31;CEB;Total charges d'exploitation Bancaire;Resultat
+32;PNB;Produit net Bancaire;Resultat
+33;PR5_CH4;Dotations aux provisions et resultat des corrections de valeurs sur creances,hors bilan et passif;Resultat
+34;PR6_CH5;Dotations aux provisions et  resultat des corrections de valeurs sur portefeuille d'investissement;Resultat
+35;PR7;Autres produits d'exploitation;Resultat
+36;CH6;Frais de personnel;Resultat
+37;CH7;Charges generales d exploitation;Resultat
+38;CH8;Dotations aux amortissements et aux provisions sur immobilisations;Resultat
+39;RE;Resultat d’exploitation;Resultat
+40;PR8_CH9;Solde en gain/perte provenant des autres elements ordinaires;Resultat
+41;CH11;Impot sur les benéfices;Resultat
+42;RAO;Resultat des activites ordinaires;Resultat
+43;PR9_CH10;Solde en gain/perte provenant des autres elements extra-ordinaires;Resultat
+44;RNet;Resultat Net de la Periode;Resultat
+45;ModifC;Effet des modifications comptables;Resultat
+46;RNetMC;Resultat Net des modifications comptables;Resultat
