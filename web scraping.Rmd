@@ -1,0 +1,106 @@
+---
+title: "Web scraping"
+output: html_notebook
+---
+
+
+
+## Librairies 
+```{r}
+library(reticulate)
+library(plyr)
+```
+```{r}
+
+
+```
+
+```{python}
+
+import pandas as pd 
+import requests
+from bs4 import BeautifulSoup 
+import io
+from PyPDF2 import PdfFileReader
+import urllib.request
+from PyPDF2 import PdfFileReader
+from PyPDF2 import PdfFileWriter
+from tabulate import tabulate 
+import tabula
+
+
+## Fonction et variables utiles 
+
+def download_file(download_url, filename):
+    response = urllib.request.urlopen(download_url)    
+    file = open(filename+'.pdf', 'wb')
+    file.write(response.read())
+    file.close()
+    
+L= [ i for i in range (2015,2023)]
+values=[25,66,648,666,686,714,728,767]
+dict_an ={ }
+j=0
+for i in L :
+  dict_an[i]=values[j]
+  j=j+1
+
+
+## Fonction pour télécharger les données :
+
+
+def rechercher(nom_banque,trim,an):
+  b=nom_banque.upper()
+  num_trim=str(trim)
+  if trim==1: 
+    e="er"
+  else:
+    e="eme"
+  indice_an=str(dict_an[an])
+  url = "https://www.cmf.tn/?q=indicateurs-d-activit-&field_secteur_value=Etablissement+de+cr%C3%A9dit&field_soci_t__value="+b+"+BANK&field_trimestre_value="+num_trim+"+"+e+"+trimestre&field_ann_e_indicateurs_tid="+indice_an
+  read = requests.get(url)
+  html_content = read.content
+  soup = BeautifulSoup(html_content, "html.parser")
+  s= soup.find("span", {"class": "file"}).find("a")
+  s2=s.get("href")
+  f=b + " "+ "Bank"+" " +"trimestre " +" " + num_trim + " "+ "année"+" " + str(an)
+  download_file(s2,f)
+  return s2
+
+
+
+## Importer les données financières d'Amen Bank 2021 1er trimestre 
+
+import ssl
+
+ssl._create_default_https_context = ssl._create_unverified_context
+rechercher("attijari",3,2021)
+```
+
+## Lire le fichier pdf en dataframe 
+
+```{python}
+df = tabula.read_pdf("ATTIJARI Bank trimestre  3 année 2021.pdf",pages="all")[0] 
+```
+
+## Description du dataframe
+```{python}
+df.describe()
+```
+
+## Changer le nom de qcq colonnes 
+
+```{r}
+
+a=py$df %>% 
+  View(a)
+```
+
+
+## Corriger les lignes 
+```{r}
+a= a[-(1:6),]
+View(a)
+
+```
+
